@@ -50,7 +50,8 @@ case class ById(id: String) extends ElementFinder {
 }
 
 case class ByClass(clss: String) extends ElementFinder {
-  def find(node: HtmlElement): Seq[HtmlElement] = node.querySelectorAll(clss).map(_.asInstanceOf[HtmlElement])
+  def find(node: HtmlElement): Seq[HtmlElement] = node.getHtmlElementDescendants.filter(
+    _.getAttribute("class").split("\\s+").contains(clss)).toSeq // node.querySelectorAll(clss).map(_.asInstanceOf[HtmlElement])
 }
 
 case class ByTag(tag: String) extends ElementFinder {

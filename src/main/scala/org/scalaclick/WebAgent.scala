@@ -57,6 +57,8 @@ class WebAgent private(page: HtmlPage) {
     }
   }
 
+  def select(selector:String) = elements[HtmlElement](selector).map(new MatchedElement(_))
+
   def typeKeys(target:String, str:String){
     element[HtmlElement](target).`type`(str)
   }
@@ -100,6 +102,8 @@ class WebAgent private(page: HtmlPage) {
 
   def attr(selector:String, attr:String) = element[HtmlElement](selector).getAttribute(attr)
 
+  def text(selector:String) = elements[HtmlElement](selector).map(e=>e.getTextContent)
+
   private def element[T <: HtmlElement](selector: String): T = find(selector) match {
     case Some(e) => e
     case _ => val tmpfile = File.createTempFile("page", ".html")
@@ -123,3 +127,12 @@ class WebAgent private(page: HtmlPage) {
 
 }
 
+
+class MatchedElement(elem:HtmlElement){
+  def text = elem.getTextContent
+  def xml = elem.asXml()
+  def attr(name:String) = elem.getAttribute(name)
+  def value = if(elem.isInstanceOf[HtmlInput]) elem.asInstanceOf[HtmlInput].getValueAttribute
+    else if (elem.isInstanceOf[HtmlOption]) elem.asInstanceOf[HtmlOption].getValueAttribute
+    else if (elem.isInstanceOf[HtmlTextArea]) elem.asInstanceOf[HtmlTextArea].getText
+}
