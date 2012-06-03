@@ -11,8 +11,8 @@ import scala.xml.XML
 /**
  * Simple HTMLUnit wrapper for basic UI interactions: type and click
  */
-object WebAgent {
-  private[WebAgent] val logger = Logger.getLogger(classOf[WebAgent])
+object WebPage {
+  private[WebPage] val logger = Logger.getLogger(classOf[WebPage])
 
   def defaultClient = {
     val webClient = new WebClient(BrowserVersion.FIREFOX_3_6)
@@ -30,15 +30,15 @@ object WebAgent {
   def open(url: String) = {
     val page: HtmlPage = defaultClient.getPage(url)
     logger.debug("Page :" + url + "==================\n" + page.asText())
-    new WebAgent(page)
+    new WebPage(page)
   }
 
   def apply(url: String) = open(url)
 }
 
-import WebAgent._
+import WebPage._
 
-class WebAgent private(page: HtmlPage) {
+class WebPage private(private var page: HtmlPage) {
   import collection.JavaConversions._
   import ElementFinder._
 
@@ -46,24 +46,29 @@ class WebAgent private(page: HtmlPage) {
 
   def click(selector: String, wait:Long=0) = {
     val elem = element[HtmlElement](selector)
-    val page = elem.click[HtmlPage]()
+    val previous  = page
+    page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(wait)
     if (count > 0) {
       logger.warn(count + " background scripts are still running")
     }
-    if (page == this.page) this else {
+    if (previous != this.page){
       logger.debug("Click on " + elem.asXml() + ":============\n" + page.asXml())
-      new WebAgent(page)
     }
+    this
   }
 
-  def select(selector:String) = elements[HtmlElement](selector).map(new MatchedElement(_))
+  def all(selector:String) = elements[HtmlElement](selector).map(new MatchedElement(_))
 
-  def typeKeys(target:String, str:String){
+  def first(selector:String) = new MatchedElement(element[HtmlElement](selector))
+
+  def find(selector:String) = findElement[HtmlElement](selector).map(new MatchedElement(_))
+
+  def typeString(target:String, str:String){
     element[HtmlElement](target).`type`(str)
   }
 
-  def asXml(selector:String) = XML.load(element[HtmlElement](selector).asXml())
+  def asXml(selector:String) = element[HtmlElement](selector).asXml()
 
   def fill(formSelector:String, values:Map[String,String]){
     values.foreach{case (k,v) => val inputs = element[HtmlForm](formSelector).getInputsByName(k)
@@ -104,7 +109,7 @@ class WebAgent private(page: HtmlPage) {
 
   def text(selector:String) = elements[HtmlElement](selector).map(e=>e.getTextContent)
 
-  private def element[T <: HtmlElement](selector: String): T = find(selector) match {
+  private def element[T <: HtmlElement](selector: String): T = findElement(selector) match {
     case Some(e) => e
     case _ => val tmpfile = File.createTempFile("page", ".html")
     FileUtils.writeStringToFile(tmpfile, page.asXml())
@@ -114,7 +119,7 @@ class WebAgent private(page: HtmlPage) {
   private def elements[T <: HtmlElement](selector: String): Seq[T] = findAll(page.getEnclosingWindow.getTopWindow.
     getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement, selector)
 
-  private def find[T <: HtmlElement](selector: String) = findFirst[T](page.getEnclosingWindow.getTopWindow.
+  private def findElement[T <: HtmlElement](selector: String) = findFirst[T](page.getEnclosingWindow.getTopWindow.
     getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement, selector)
 
   def getAsStream(path: String) = {
@@ -130,9 +135,29 @@ class WebAgent private(page: HtmlPage) {
 
 class MatchedElement(elem:HtmlElement){
   def text = elem.getTextContent
+
   def xml = elem.asXml()
+
   def attr(name:String) = elem.getAttribute(name)
+
   def value = if(elem.isInstanceOf[HtmlInput]) elem.asInstanceOf[HtmlInput].getValueAttribute
     else if (elem.isInstanceOf[HtmlOption]) elem.asInstanceOf[HtmlOption].getValueAttribute
     else if (elem.isInstanceOf[HtmlTextArea]) elem.asInstanceOf[HtmlTextArea].getText
+    else sys.error("Value not supported in element " + elem)
+
+  def typeString(str:String){
+    elem.`type`(str)
+  }
+
+  def value_=(newVal:String) = if(elem.isInstanceOf[HtmlSelect]) elem.asInstanceOf[HtmlSelect].setSelectedAttribute(newVal, true)
+    else if (elem.isInstanceOf[HtmlRadioButtonInput]) { val radio = elem.asInstanceOf[HtmlRadioButtonInput]
+      if (radio.getValueAttribute == newVal) radio.setChecked(true)
+    }else if (elem.isInstanceOf[HtmlCheckBoxInput]){val check = elem.asInstanceOf[HtmlCheckBoxInput]
+      check.setChecked(check.getValueAttribute==newVal)
+    }else if (elem.isInstanceOf[HtmlInput]) elem.asInstanceOf[HtmlInput].setValueAttribute(newVal)
+    else if (elem.isInstanceOf[HtmlTextArea]) elem.asInstanceOf[HtmlTextArea].setText(newVal)
+    else sys.error("unsupported setting value for element :"  + elem)
+
+  def click(){elem.click()}
+
 }
