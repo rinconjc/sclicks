@@ -25,25 +25,50 @@ object WebPage {
     webClient
   }
 
-  val defaultWaitBefore = 2000
-
-  def open(url: String) = {
-    val page: HtmlPage = defaultClient.getPage(url)
+  /**
+   * Opens the specified URL as a WebPage
+   * @param url
+   * @param client
+   * @return
+   */
+  def open(url: String)(implicit client:WebClient = defaultClient) = {
+    val page: HtmlPage = client.getPage(url)
     logger.debug("Page :" + url + "==================\n" + page.asText())
     new WebPage(page)
   }
 
+  /**
+   * Create a new WebPage from the given URL
+   * @param url
+   * @return
+   */
   def apply(url: String) = open(url)
 }
 
 import WebPage._
 
+/**
+ * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML element queries
+ * @param page
+ */
 class WebPage private(private var page: HtmlPage) {
   import collection.JavaConversions._
   import ElementFinder._
 
+  /**
+   * Page title
+   * @return
+   */
   def title = page.getTitleText
 
+  /**
+   * Simulates a click on the element matching the specified selector. The click action may result in a new page loading
+   * in which case page field will be update to the new page.
+   *
+   * @param selector An element select (see Selectors)
+   * @param wait Time in millisecs to wait for javascript execution after page load
+   * @return this same instance
+   */
   def click(selector: String, wait:Long=0) = {
     val elem = element[HtmlElement](selector)
     val previous  = page
@@ -58,6 +83,11 @@ class WebPage private(private var page: HtmlPage) {
     this
   }
 
+  /**
+   * Returns all elements matching the given selector
+   * @param selector
+   * @return
+   */
   def all(selector:String) = elements[HtmlElement](selector).map(new MatchedElement(_))
 
   def first(selector:String) = new MatchedElement(element[HtmlElement](selector))
@@ -85,6 +115,10 @@ class WebPage private(private var page: HtmlPage) {
     }
   }
 
+  /**
+   * Returns the page text content
+   * @return Page text content
+   */
   def asText = try {
     page.asText()
   } catch {
@@ -133,6 +167,10 @@ class WebPage private(private var page: HtmlPage) {
 }
 
 
+/**
+ * A simple wrapper around HTML Elements to provide common and most used methods
+ * @param elem
+ */
 class MatchedElement(elem:HtmlElement){
   def text = elem.getTextContent
 
