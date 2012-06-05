@@ -74,7 +74,7 @@ class WebPage private(private var page: HtmlPage) {
     val previous  = page
     page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(wait)
-    if (count > 0) {
+    while (count > 0) {
       logger.warn(count + " background scripts are still running")
     }
     if (previous != this.page){
