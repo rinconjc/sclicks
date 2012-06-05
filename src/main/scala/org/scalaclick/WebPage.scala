@@ -14,8 +14,11 @@ import scala.xml.XML
 object WebPage {
   private[WebPage] val logger = Logger.getLogger(classOf[WebPage])
 
-  def defaultClient = {
-    val webClient = new WebClient(BrowserVersion.FIREFOX_3_6)
+  val CHROME_20 = new BrowserVersion("CHROME","5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6",20)
+  val FIREFOX_11 = new BrowserVersion("Mozilla","5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
+
+  def defaultClient(implicit browser:BrowserVersion = BrowserVersion.FIREFOX_3_6) = {
+    val webClient = new WebClient(browser)
     webClient.setThrowExceptionOnScriptError(false)
     webClient.setAjaxController(new NicelyResynchronizingAjaxController)
 
@@ -28,11 +31,11 @@ object WebPage {
   /**
    * Opens the specified URL as a WebPage
    * @param url
-   * @param client the HtmlUnit webclient implementation. Defaults to Firefox-3.6 with proxy, ajax support and ignore JS errors
+   * @param browser the HtmlUnit browser version implementation. Defaults to Firefox-3.6 with proxy, ajax support and ignore JS errors
    * @return
    */
-  def open(url: String)(implicit client:WebClient = defaultClient) = {
-    val page: HtmlPage = client.getPage(url)
+  def open(url: String)(implicit browser:BrowserVersion = BrowserVersion.FIREFOX_3_6) = {
+    val page: HtmlPage = defaultClient(browser).getPage(url)
     logger.debug("Page :" + url + "==================\n" + page.asText())
     new WebPage(page)
   }
@@ -74,8 +77,9 @@ class WebPage private(private var page: HtmlPage) {
     val previous  = page
     page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(wait)
-    while (count > 0) {
+    if (count > 0) {
       logger.warn(count + " background scripts are still running")
+      page.getWebClient.waitForBackgroundJavaScript(5000)
     }
     if (previous != this.page){
       logger.debug("Click on " + elem.asXml() + ":============\n" + page.asXml())
@@ -148,6 +152,10 @@ class WebPage private(private var page: HtmlPage) {
     page.asText()
   } catch {
     case e => logger.error("Failed extracting page text", e); "--FAILED TO EXTRACT PAGE TEXT--"
+  }
+
+  def saveTo(file:String){
+    FileUtils.writeStringToFile(new File(file), page.asXml())
   }
 
   /**
