@@ -14,12 +14,12 @@ A Simple HTMLUnit wrapper for basic headless browsing interactions (type and cli
 
         //now let's get the urls from google
 
-        val google = open("https://www.google.com.au")
+        val google = open("https://www.google.com.au")(CHROME_20)
         var urls = titles.map{title=>
             google.first("input[name='q']").value = "\"" + title + "\""
-            google.click("button[name='btnG']")
+            google.click("input[name='btnG']")
             //
-            google.all("li .g a").find(_.text.contains("Video: " + title )).map(e=>"url=([^&$]+)".r.findFirstMatchIn(e.attr ("url")).map(_.group(1))).flatten
+            google.all("#ires .g a").find(_.text.contains("Video: " + title )).map(e=>"url=([^&$]+)".r.findFirstMatchIn(e.attr ("url")).map(_.group(1))).flatten
         }.flatten.map(decode(_,"UTF-8"))
 
         urls foreach println
