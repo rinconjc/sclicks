@@ -99,17 +99,19 @@ case class ByTag(tag: String) extends ElementFinder {
 
 /**
  * Finds elements by attribute expression.
- * @param tag element tag name
+ * @param tag element tag name. * to indicate any element tag
  * @param attr attribute name
  * @param op = exact match, *= partial match
  * @param value value predicate
  */
 case class ByAttr(tag: String, attr: String, op: String, value: String) extends ElementFinder {
-  def find(node: HtmlElement) = node.getElementsByTagName(tag).filter {
-    e =>
-      if (op == "=") e.getAttribute(attr) == value
-      else if (op == "*=") e.getAttribute(attr).contains(value)
-      else sys.error("Unsupported operator " + op)
+  val filter = (e:HtmlElement) => if (op == "=") e.getAttribute(attr) == value
+    else if (op == "*=") e.getAttribute(attr).contains(value)
+    else sys.error("Unsupported operator " + op)
+
+  def find(node: HtmlElement) = {
+    if (tag=="*") node.getHtmlElementDescendants.filter(filter).toSeq
+    else node.getElementsByTagName(tag).filter(filter)
   }
 }
 

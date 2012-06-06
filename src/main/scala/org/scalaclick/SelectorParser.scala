@@ -56,8 +56,9 @@ object SelectorParser extends RegexParsers {
    * Matches elements selector by attribute e.g.
    * element[attr_name='attr_value'] //exact match
    * element[attr_name*='attr_value'] // partial match: attribute contains attr_value
+   * *[attr_name='attr_val'] // any element with the given attributes
    */
-  lazy val byAttr = regexMatch( """([^\[]+)\[([^*=]+)([^']+)'([^']+)'\]""".r) ^^ {
+  lazy val byAttr = regexMatch( """([^\s\[]+)\[([^*=]+)([^']+)'([^']+)'\]""".r) ^^ {
     case m => ByAttr(m.group(1), m.group(2), m.group(3), m.group(4))
   }
   /**
