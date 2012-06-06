@@ -72,14 +72,14 @@ class WebPage private(private var page: HtmlPage) {
    * @param wait Time in millisecs to wait for javascript execution after page load
    * @return this same instance
    */
-  def click(selector: String, wait:Long=0) = {
+  def click(selector: String, wait:Long=2000) = {
     val elem = element[HtmlElement](selector)
     val previous  = page
     page = elem.click[HtmlPage]()
-    val count = page.getWebClient.waitForBackgroundJavaScript(wait)
+    val count = page.getWebClient.waitForBackgroundJavaScript(0)
     if (count > 0) {
       logger.warn(count + " background scripts are still running")
-      page.getWebClient.waitForBackgroundJavaScript(5000)
+      page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page){
       logger.debug("Click on " + elem.asXml() + ":============\n" + page.asXml())
@@ -254,6 +254,8 @@ class MatchedElement(elem:HtmlElement){
    * @param str
    */
   def typeString(str:String){
+    val selectable = elem.asInstanceOf[{def select()}]
+    selectable.select()
     elem.`type`(str)
   }
 
