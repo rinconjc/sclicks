@@ -1,7 +1,7 @@
 scala-click
 ===========
 
-A Simple HTMLUnit wrapper for headless browsing (type and click) as well as data extraction. It can be used for scraping websites that implement HTTP sessions or Ajax functionality, e.g. extracting bank account transactions.
+A Simple HTMLUnit wrapper for headless browsing (type and click) and data extraction. It can be used for scraping websites that implement HTTP sessions or Ajax functionality, e.g. extracting bank account transactions.
 
 Here's a simple example, where we get the most watched videos from a news video site, then we search google to retrieve their URLs
 
