@@ -64,7 +64,7 @@ object SelectorParser extends RegexParsers {
   /**
    * Matches an element by tag name. e.g. elem
    */
-  lazy val byTag = regexMatch("([^\\s:]+)".r) ^^ {
+  lazy val byTag = regexMatch("(\\p{Alpha}+)".r) ^^ {
     case m => ByTag(m.group(1))
   }
   /**
