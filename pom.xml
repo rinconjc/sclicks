@@ -27,11 +27,13 @@
       <version>2.9</version>
       <scope>compile</scope>
     </dependency>
+<!--
     <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
       <version>1.2.16</version>
     </dependency>
+-->
     <dependency>
         <groupId>org.specs2</groupId>
         <artifactId>specs2_2.9.2</artifactId>
@@ -86,7 +88,42 @@
                 </descriptorRefs>
             </configuration>
         </plugin>
-
+        <plugin>
+            <groupId>com.pyx4me</groupId>
+            <artifactId>proguard-maven-plugin</artifactId>
+            <executions>
+                <execution>
+                    <phase>package</phase>
+                    <goals><goal>proguard</goal></goals>
+                </execution>
+            </executions>
+            <configuration>
+                <proguardVersion>4.8</proguardVersion>
+                <options>
+                    <!--<option>-allowaccessmodification</option>-->
+                    <option>-keep public class org.scalaclick.** </option>
+                </options>
+                <libs>
+                    <lib>${java.home}/lib/rt.jar</lib>
+                </libs>
+                <includeDependency>true</includeDependency>
+                <assembly>
+                    <inclusions>
+                        <inclusion>
+                            <groupId>net.sourceforge.htmlunit</groupId>
+                            <artifactId>htmlunit</artifactId>
+                        </inclusion>
+                    </inclusions>
+                </assembly>
+            </configuration>
+            <dependencies>
+                <dependency>
+                    <groupId>net.sf.proguard</groupId>
+                    <artifactId>proguard</artifactId>
+                    <version>4.8</version>
+                </dependency>
+            </dependencies>
+        </plugin>
     </plugins>
   </build>
   <reporting>

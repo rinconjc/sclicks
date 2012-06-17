@@ -2,7 +2,7 @@ package org.scalaclick
 
 import com.gargoylesoftware.htmlunit.html.{HtmlPage, BaseFrame, HtmlElement}
 import collection.JavaConversions._
-import org.apache.log4j.Logger
+import java.util.logging.Logger
 
 /**
  * A simple html element finder based on Jquery like selectors
@@ -44,7 +44,7 @@ object ElementFinder {
  * Base element finder
  */
 trait ElementFinder {
-  protected val logger = Logger.getLogger(this.getClass)
+  protected val logger = Logger.getLogger(this.getClass.getName)
 
   /**
    * Finds elements matching this finder
@@ -52,10 +52,10 @@ trait ElementFinder {
    * @return
    */
   def findElements(node: HtmlElement): Seq[HtmlElement] = {
-    logger.debug("Finding elements in node %s with finder %s\n".format(node, this))
+    logger.fine("Finding elements in node %s with finder %s\n".format(node, this))
     if (node.isInstanceOf[BaseFrame]) {
       val newnode = node.asInstanceOf[BaseFrame].getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement
-      logger.debug("search node was a frame, replacing with frame inner document %s\n".format(newnode))
+      logger.fine("search node was a frame, replacing with frame inner document %s\n".format(newnode))
       findElements(newnode)
     } else find(node)
   }
@@ -76,7 +76,7 @@ case class ById(id: String) extends ElementFinder {
   def find(node: HtmlElement): Seq[HtmlElement] = try {
     List(node.getElementById[HtmlElement](id))
   } catch {
-    case e => logger.warn("Element not found " + e); Nil
+    case e => logger.warning("Element not found " + e); Nil
   }
 }
 
