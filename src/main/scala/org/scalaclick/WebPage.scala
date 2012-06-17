@@ -1,18 +1,17 @@
 package org.scalaclick
 
 import com.gargoylesoftware.htmlunit.html._
-import org.apache.log4j.Logger
 
 import org.apache.commons.io.FileUtils
 import java.io.File
 import com.gargoylesoftware.htmlunit._
-import scala.xml.XML
+import java.util.logging.Logger
 
 /**
  * Simple HTMLUnit wrapper for basic UI interactions: type and click
  */
 object WebPage {
-  private[WebPage] val logger = Logger.getLogger(classOf[WebPage])
+  private[WebPage] val logger = Logger.getLogger(classOf[WebPage].getName)
 
   val CHROME_20 = new BrowserVersion("CHROME","5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6",20)
   val FIREFOX_11 = new BrowserVersion("Mozilla","5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
@@ -36,7 +35,7 @@ object WebPage {
    */
   def open(url: String)(implicit browser:BrowserVersion = BrowserVersion.FIREFOX_3_6) = {
     val page: HtmlPage = defaultClient(browser).getPage(url)
-    logger.debug("Page :" + url + "==================\n" + page.asText())
+    logger.fine("Page :" + url + "==================\n" + page.asText())
     new WebPage(page)
   }
 
@@ -78,11 +77,11 @@ class WebPage private(private var page: HtmlPage) {
     page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(0)
     if (count > 0) {
-      logger.warn(count + " background scripts are still running")
+      logger.warning(count + " background scripts are still running")
       page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page){
-      logger.debug("Click on " + elem.asXml() + ":============\n" + page.asXml())
+      logger.fine("Click on " + elem.asXml() + ":============\n" + page.asXml())
     }
     this
   }
@@ -151,7 +150,7 @@ class WebPage private(private var page: HtmlPage) {
   def asText = try {
     page.asText()
   } catch {
-    case e => logger.error("Failed extracting page text", e); "--FAILED TO EXTRACT PAGE TEXT--"
+    case e => logger.severe("Failed extracting page text " + e); "--FAILED TO EXTRACT PAGE TEXT--"
   }
 
   def saveTo(file:String){

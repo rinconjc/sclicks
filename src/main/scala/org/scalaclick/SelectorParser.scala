@@ -2,7 +2,7 @@ package org.scalaclick
 
 import util.parsing.combinator.RegexParsers
 import util.matching.Regex
-import org.apache.log4j.Logger
+import java.util.logging.Logger
 
 /**
  * A JQuery like html element selector parser.
@@ -18,7 +18,7 @@ import org.apache.log4j.Logger
  */
 
 object SelectorParser extends RegexParsers {
-  private val logger = Logger.getLogger(this.getClass)
+  private val logger = Logger.getLogger(this.getClass.getName)
 
   def regexMatch(r: Regex): Parser[Regex.Match] = new Parser[Regex.Match] {
     def apply(in: Input) = {
@@ -81,7 +81,7 @@ object SelectorParser extends RegexParsers {
    */
   def parse(input: String) = {
     val result = this.parseAll(selector, input)
-    logger.debug("Parsed selectors:" + result)
+    logger.fine("Parsed selectors:" + result)
     result.getOrElse(Nil)
   }
 }
