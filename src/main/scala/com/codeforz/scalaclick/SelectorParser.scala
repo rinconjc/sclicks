@@ -1,8 +1,9 @@
-package org.scalaclick
+package com.codeforz.scalaclick
 
 import util.parsing.combinator.RegexParsers
 import util.matching.Regex
 import java.util.logging.Logger
+import scala.Some
 
 /**
  * A JQuery like html element selector parser.
