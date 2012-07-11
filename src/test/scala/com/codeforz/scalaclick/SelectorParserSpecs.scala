@@ -1,4 +1,4 @@
-package org.scalaclick
+package com.codeforz.scalaclick
 
 import org.specs2.mutable.SpecificationWithJUnit
 

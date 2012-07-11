@@ -1,8 +1,35 @@
-package org.scalaclick
+package com.codeforz.scalaclick
 
 import com.gargoylesoftware.htmlunit.html.{HtmlPage, BaseFrame, HtmlElement}
-import collection.JavaConversions._
 import java.util.logging.Logger
+import collection.JavaConversions._
+/**
+ * Base element finder
+ */
+trait ElementFinder {
+  protected val logger = Logger.getLogger(this.getClass.getName)
+
+  /**
+   * Finds elements matching this finder
+   * @param node
+   * @return
+   */
+  def findElements(node: HtmlElement): Seq[HtmlElement] = {
+    logger.fine("Finding elements in node %s with finder %s\n".format(node, this))
+    if (node.isInstanceOf[BaseFrame]) {
+      val newnode = node.asInstanceOf[BaseFrame].getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement
+      logger.fine("search node was a frame, replacing with frame inner document %s\n".format(newnode))
+      findElements(newnode)
+    } else find(node)
+  }
+
+  /**
+   * Finds all matching elements
+   * @param node
+   * @return
+   */
+  protected def find(node: HtmlElement): Seq[HtmlElement]
+}
 
 /**
  * A simple html element finder based on Jquery like selectors
@@ -40,33 +67,6 @@ object ElementFinder {
   }
 }
 
-/**
- * Base element finder
- */
-trait ElementFinder {
-  protected val logger = Logger.getLogger(this.getClass.getName)
-
-  /**
-   * Finds elements matching this finder
-   * @param node
-   * @return
-   */
-  def findElements(node: HtmlElement): Seq[HtmlElement] = {
-    logger.fine("Finding elements in node %s with finder %s\n".format(node, this))
-    if (node.isInstanceOf[BaseFrame]) {
-      val newnode = node.asInstanceOf[BaseFrame].getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement
-      logger.fine("search node was a frame, replacing with frame inner document %s\n".format(newnode))
-      findElements(newnode)
-    } else find(node)
-  }
-
-  /**
-   * Finds all matching elements
-   * @param node
-   * @return
-   */
-  protected def find(node: HtmlElement): Seq[HtmlElement]
-}
 
 /**
  * Simple finder that finds elements by id
@@ -106,8 +106,8 @@ case class ByTag(tag: String) extends ElementFinder {
  */
 case class ByAttr(tag: String, attr: String, op: String, value: String) extends ElementFinder {
   val filter = (e:HtmlElement) => if (op == "=") e.getAttribute(attr) == value
-    else if (op == "*=") e.getAttribute(attr).contains(value)
-    else sys.error("Unsupported operator " + op)
+  else if (op == "*=") e.getAttribute(attr).contains(value)
+  else sys.error("Unsupported operator " + op)
 
   def find(node: HtmlElement) = {
     if (tag=="*") node.getHtmlElementDescendants.filter(filter).toSeq
