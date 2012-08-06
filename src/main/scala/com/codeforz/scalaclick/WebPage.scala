@@ -91,7 +91,20 @@ class WebPage private(private var page: HtmlPage) {
    * @param wait Time in millisecs to wait for javascript execution after page load
    * @return this same instance
    */
-  def click(selector: String, wait: Long = 2000) = mouseAction(selector, "click", wait)
+  def click(selector: String, wait: Long = 2000) = {
+    val elem = element[HtmlElement](selector)
+    val previous = page
+    page = elem.click[HtmlPage]()
+    val count = page.getWebClient.waitForBackgroundJavaScript(0)
+    if (count > 0) {
+      logger.warning(count + " background scripts are still running")
+      page.getWebClient.waitForBackgroundJavaScript(wait)
+    }
+    if (previous != this.page) {
+      logger.info("click on " + elem.asXml() + ":============\n" + page.asXml())
+    }
+    this
+  }
 
   def mouseDown(selector: String, wait: Long = 2000) = mouseAction(selector, "mousedown", wait)
 
@@ -99,7 +112,6 @@ class WebPage private(private var page: HtmlPage) {
     val elem = element[HtmlElement](selector)
     val previous = page
     page = fireEvent(elem, action)
-    //page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(0)
     if (count > 0) {
       logger.warning(count + " background scripts are still running")
