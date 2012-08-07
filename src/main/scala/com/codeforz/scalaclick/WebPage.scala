@@ -245,9 +245,9 @@ class WebPage private(private var page: HtmlPage) {
 
   private def element[T <: HtmlElement](selector: String): T = findElement(selector) match {
     case Some(e) => e
-    case _ => val tmpfile = File.createTempFile("page", ".html")
-    FileUtils.writeStringToFile(tmpfile, page.asXml())
-    sys.error("Element not found :" + selector + " (see page html dump in " + tmpfile.getAbsolutePath + ")");
+    case _ => logger.warning("================Element " + selector + " not found: page dump========================\n" + page.asXml()
+      + "\n===========================================================\n")
+    sys.error("Element not found :" + selector )
   }
 
   private def elements[T <: HtmlElement](selector: String): Seq[T] = findAll(page.getEnclosingWindow.getTopWindow.
