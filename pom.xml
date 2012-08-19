@@ -154,4 +154,18 @@
       </plugin>
     </plugins>
   </reporting>
+
+    <distributionManagement>
+        <repository>
+            <id>Codeforz-release</id>
+            <name>CodeForz Repository</name>
+            <url>http://mynas:8081/nexus/content/repositories/releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>Codeforz-snapshot</id>
+            <name>Codeforz Snapshots</name>
+            <url>http://mynas:8081/nexus/content/repositories/snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
+
 </project>

@@ -101,7 +101,7 @@ class WebPage private(private var page: HtmlPage) {
       page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page) {
-      logger.info("click on " + elem.asXml() + ":============\n" + page.asXml())
+      logger.fine("click on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
     this
   }
@@ -118,7 +118,7 @@ class WebPage private(private var page: HtmlPage) {
       page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page) {
-      logger.fine(action + " on " + elem.asXml() + ":============\n" + page.asXml())
+      logger.fine(action + " on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
     this
   }
