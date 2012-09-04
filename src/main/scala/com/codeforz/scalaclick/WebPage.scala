@@ -93,6 +93,10 @@ class WebPage private(private var page: HtmlPage) {
    */
   def click(selector: String, wait: Long = 2000) = {
     val elem = element[HtmlElement](selector)
+    doClick(elem, wait)
+  }
+
+  private[scalaclick] def doClick(elem: HtmlElement, wait: Long): WebPage = {
     val previous = page
     page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(0)
@@ -101,7 +105,7 @@ class WebPage private(private var page: HtmlPage) {
       page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page) {
-      logger.info("click on " + elem.asXml() + ":============\n" + page.asXml())
+      logger.fine("click on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
     this
   }
@@ -118,7 +122,7 @@ class WebPage private(private var page: HtmlPage) {
       page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page) {
-      logger.fine(action + " on " + elem.asXml() + ":============\n" + page.asXml())
+      logger.fine(action + " on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
     this
   }
@@ -323,8 +327,8 @@ class MatchedElement(elem: HtmlElement)(implicit page:WebPage) {
   /**
    * Clicks on the element (if the click loads a new use WebPage.click instead)
    */
-  def click() {
-    page.fireEvent(elem, "click")
+  def click(wait: Long = 2000) {
+    page.doClick(elem, wait)
   }
 
 }
