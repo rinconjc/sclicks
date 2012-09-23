@@ -3,7 +3,7 @@ package com.codeforz.scalaclick
 import com.gargoylesoftware.htmlunit.html._
 
 import org.apache.commons.io.FileUtils
-import java.io.File
+import java.io.{FileWriter, File}
 import com.gargoylesoftware.htmlunit._
 import java.util.logging.Logger
 import util.WebConnectionWrapper
@@ -249,9 +249,13 @@ class WebPage private(private var page: HtmlPage) {
 
   private def element[T <: HtmlElement](selector: String): T = findElement(selector) match {
     case Some(e) => e
-    case _ => logger.warning("================Element " + selector + " not found: page dump========================\n" + page.asXml()
-      + "\n===========================================================\n")
-    sys.error("Element not found :" + selector )
+    case _ =>
+    val file = File.createTempFile("page-", ".html")
+    val fw = new FileWriter(file)
+    fw.write(page.asXml())
+    fw.close()
+    logger.warning("Element not found :" + selector + " in " + file.getAbsolutePath)
+    sys.error("Element not found :" + selector + " in " + page.getTitleText )
   }
 
   private def elements[T <: HtmlElement](selector: String): Seq[T] = findAll(page.getEnclosingWindow.getTopWindow.
