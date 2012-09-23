@@ -76,7 +76,7 @@ case class ById(id: String) extends ElementFinder {
   def find(node: HtmlElement): Seq[HtmlElement] = try {
     List(node.getElementById[HtmlElement](id))
   } catch {
-    case e => logger.warning("Element not found in " + node.asXml()  + "\n" + e ); Nil
+    case e => logger.warning("Element "+ id + "not found in " + node.getNodeName + "\n" + e ); Nil
   }
 }
 
