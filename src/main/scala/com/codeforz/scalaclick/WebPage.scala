@@ -160,7 +160,7 @@ class WebPage private(private var page: HtmlPage) {
    * @param str
    */
   def typeString(target: String, str: String) {
-    element[HtmlElement](target).`type`(str)
+    first(target).typeString(str)
   }
 
   /**
