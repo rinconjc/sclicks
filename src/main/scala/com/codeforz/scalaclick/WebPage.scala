@@ -7,6 +7,7 @@ import java.io.{FileWriter, File}
 import com.gargoylesoftware.htmlunit._
 import java.util.logging.Logger
 import util.WebConnectionWrapper
+import annotation.tailrec
 
 
 trait ConnectionListener{
@@ -22,13 +23,13 @@ object WebPage {
   val CHROME_20 = new BrowserVersion("CHROME", "5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6", 20)
   val FIREFOX_11 = new BrowserVersion("Mozilla", "5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
 
-  def defaultClient(listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_3_6) = {
+  def defaultClient(listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
     val webClient = new WebClient(browser)
-    webClient.setThrowExceptionOnScriptError(false)
+    webClient.setThrowExceptionOnScriptError(false) //.getOptions.setThrowExceptionOnScriptError(false)
     webClient.setAjaxController(new NicelyResynchronizingAjaxController)
 
     if (sys.props("http.proxyHost") != null) {
-      webClient.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt))
+      webClient.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt)) //.getOptions.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt))
     }
     if (listeners.nonEmpty){
       //wrap connection
@@ -41,6 +42,8 @@ object WebPage {
         }
       })
     }
+    //webClient.setRefreshHandler(new WaitingRefreshHandler(1))
+    webClient.getJavaScriptEngine.holdPosponedActions()
     webClient
   }
 
@@ -50,9 +53,10 @@ object WebPage {
    * @param browser the HtmlUnit browser version implementation. Defaults to Firefox-3.6 with proxy, ajax support and ignore JS errors
    * @return
    */
-  def open(url: String, listeners:ConnectionListener*)(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_3_6) = {
+  def open(url: String, listeners:ConnectionListener*)(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
     val page: HtmlPage = defaultClient(listeners)(browser).getPage(url)
     logger.fine("Page :" + url + "==================\n" + page.asText())
+    //page.setStrictErrorChecking(false)
     new WebPage(page)
   }
 
@@ -186,7 +190,7 @@ class WebPage private(private var page: HtmlPage) {
       } else if (e.isInstanceOf[HtmlCheckBoxInput]) {
         val check = e.asInstanceOf[HtmlCheckBoxInput]
         check.setChecked(check.getValueAttribute == v)
-      } else if (e.isInstanceOf[HtmlInput]) e.asInstanceOf[HtmlInput].setValueAttribute(v)
+      } else if (e.isInstanceOf[HtmlInput]) e.setValueAttribute(v)
       else if (e.isInstanceOf[HtmlTextArea]) e.asInstanceOf[HtmlTextArea].setText(v)
       else sys.error("unsupported element for form fill:" + k)
       )
@@ -247,6 +251,23 @@ class WebPage private(private var page: HtmlPage) {
     else response.getContentAsStream
   }
 
+  @tailrec
+  final def waitForScripts(maxscripts:Int, maxsecs:Int=60){
+    val count = page.getWebClient.waitForBackgroundJavaScript(3000)
+    if (count > maxscripts){
+      logger.info("scripts still running:" + count)
+      if (maxsecs <= 0) logger.warning("Timed out waiting for script completion :" + count)
+      else waitForScripts(maxscripts, maxsecs - 3)
+    }
+  }
+
+  def waitForScripts(timeout:Long)={
+    val count = page.getWebClient.waitForBackgroundJavaScript(timeout)
+    logger.info("tasks running " + count)
+    page.getWebClient.getJavaScriptEngine.holdPosponedActions()
+    count
+  }
+
   private def element[T <: HtmlElement](selector: String): T = findElement(selector) match {
     case Some(e) => e
     case _ =>
@@ -291,6 +312,13 @@ class MatchedElement(elem: HtmlElement)(implicit page:WebPage) {
    * @return
    */
   def attr(name: String) = elem.getAttribute(name)
+
+  /**
+   * Sets an attribute value
+   * @param name
+   * @param values
+   */
+  def attr(name: String,value:String){elem.setAttribute(name,value)}
 
   /**
    * Value of the element. Only Form elements are supported i.e html input, option, select(single value), and textarea
