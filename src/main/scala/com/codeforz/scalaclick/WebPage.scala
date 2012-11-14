@@ -285,6 +285,10 @@ class WebPage private(private var page: HtmlPage) {
   private def findElement[T <: HtmlElement](selector: String) = findFirst[T](page.getEnclosingWindow.getTopWindow.
     getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement, selector)
 
+  def closeAll(){
+    page.getWebClient.closeAllWindows()
+    logger.info("All pages closed")
+  }
 
 }
 
