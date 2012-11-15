@@ -253,20 +253,22 @@ class WebPage private(private var page: HtmlPage) {
 
   @tailrec
   final def waitForScripts(maxscripts:Int, maxsecs:Int=60){
-    val count = page.getWebClient.waitForBackgroundJavaScript(3000)
+    val count = page.getWebClient.waitForBackgroundJavaScript(6000)
     if (count > maxscripts){
       logger.info("scripts still running:" + count)
       if (maxsecs <= 0) logger.warning("Timed out waiting for script completion :" + count)
-      else waitForScripts(maxscripts, maxsecs - 3)
+      else waitForScripts(maxscripts, maxsecs - 6)
     }
   }
 
+/*
   def waitForScripts(timeout:Long)={
     val count = page.getWebClient.waitForBackgroundJavaScript(timeout)
     logger.info("tasks running " + count)
     page.getWebClient.getJavaScriptEngine.holdPosponedActions()
     count
   }
+*/
 
   private def element[T <: HtmlElement](selector: String): T = findElement(selector) match {
     case Some(e) => e
