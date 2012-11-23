@@ -26,6 +26,7 @@ object WebPage {
   def defaultClient(listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
     val webClient = new WebClient(browser)
     webClient.setThrowExceptionOnScriptError(false) //.getOptions.setThrowExceptionOnScriptError(false)
+    webClient.setThrowExceptionOnFailingStatusCode(false)
     webClient.setAjaxController(new NicelyResynchronizingAjaxController)
 
     if (sys.props("http.proxyHost") != null) {
@@ -177,7 +178,7 @@ class WebPage private(private var page: HtmlPage) {
   /**
    * Fills the elements of the form matching the given selector, with the provided values
    * @param formSelector
-   * @param values
+   * @param valuesWaitingRefreshHandler
    */
   def fill(formSelector: String, values: Map[String, String]) {
     values.foreach {
@@ -367,6 +368,11 @@ class MatchedElement(elem: HtmlElement)(implicit page:WebPage) {
    */
   def click(wait: Long = 2000) {
     page.doClick(elem, wait)
+  }
+
+  def parent = elem.getParentNode match{
+    case e:HtmlElement => Some(new MatchedElement(e))
+    case _ => None
   }
 
 }
