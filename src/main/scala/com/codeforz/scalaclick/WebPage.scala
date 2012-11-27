@@ -8,6 +8,7 @@ import com.gargoylesoftware.htmlunit._
 import java.util.logging.Logger
 import util.WebConnectionWrapper
 import annotation.tailrec
+import java.net.URL
 
 
 trait ConnectionListener{
@@ -43,7 +44,18 @@ object WebPage {
         }
       })
     }
-    //webClient.setRefreshHandler(new WaitingRefreshHandler(1))
+    webClient.setRefreshHandler(new ImmediateRefreshHandler(){
+      override def handleRefresh(page: Page, url: URL, seconds: Int) {
+        try{
+          super.handleRefresh(page, url, seconds)
+        }catch{
+          case e:RuntimeException if(e.getMessage.contains("Attempted to refresh a page using an ImmediateRefreshHandler")) =>
+            logger.warning("Ignoring refresh exception " + e)
+          //do nothing
+          case t:Throwable => throw t
+        }
+      }
+    })
     webClient.getJavaScriptEngine.holdPosponedActions()
     webClient
   }
