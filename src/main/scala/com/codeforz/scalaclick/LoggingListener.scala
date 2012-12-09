@@ -1,14 +1,13 @@
 package com.codeforz.scalaclick
 
 import com.gargoylesoftware.htmlunit.{WebResponse, WebRequest}
-import java.util.logging.Logger
+import grizzled.slf4j.Logging
 
 /**
  *
  */
 
-object LoggingListener extends ConnectionListener{
-  protected val logger = Logger.getLogger(this.getClass.getName)
+object LoggingListener extends ConnectionListener with Logging{
 
   def requesting(req: WebRequest) {
     logger.info("Requesting:" + req.getUrl)

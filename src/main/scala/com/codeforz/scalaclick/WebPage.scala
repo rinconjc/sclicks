@@ -5,10 +5,10 @@ import com.gargoylesoftware.htmlunit.html._
 import org.apache.commons.io.FileUtils
 import java.io.{FileWriter, File}
 import com.gargoylesoftware.htmlunit._
-import java.util.logging.Logger
 import util.WebConnectionWrapper
 import annotation.tailrec
 import java.net.URL
+import grizzled.slf4j.Logging
 
 
 trait ConnectionListener{
@@ -18,8 +18,7 @@ trait ConnectionListener{
 /**
  * Simple HTMLUnit wrapper for basic UI interactions: type and click
  */
-object WebPage {
-  private[WebPage] val logger = Logger.getLogger(classOf[WebPage].getName)
+object WebPage extends Logging{
 
   val CHROME_20 = new BrowserVersion("CHROME", "5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6", 20)
   val FIREFOX_11 = new BrowserVersion("Mozilla", "5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
@@ -50,7 +49,7 @@ object WebPage {
           super.handleRefresh(page, url, seconds)
         }catch{
           case e:RuntimeException if(e.getMessage.contains("Attempted to refresh a page using an ImmediateRefreshHandler")) =>
-            logger.warning("Ignoring refresh exception " + e)
+            warn("Ignoring refresh exception " + e)
           //do nothing
           case t:Throwable => throw t
         }
@@ -68,7 +67,7 @@ object WebPage {
    */
   def open(url: String, listeners:ConnectionListener*)(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
     val page: HtmlPage = defaultClient(listeners)(browser).getPage(url)
-    logger.fine("Page :" + url + "==================\n" + page.asText())
+    debug("Page :" + url + "==================\n" + page.asText())
     //page.setStrictErrorChecking(false)
     new WebPage(page)
   }
@@ -87,7 +86,7 @@ import WebPage._
  * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML element queries
  * @param page
  */
-class WebPage private(private var page: HtmlPage) {
+class WebPage private(private var page: HtmlPage) extends Logging{
 
   import collection.JavaConversions._
   import ElementFinder._
@@ -118,11 +117,11 @@ class WebPage private(private var page: HtmlPage) {
     page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(0)
     if (count > 0) {
-      logger.warning(count + " background scripts are still running")
+      warn(count + " background scripts are still running")
       page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page) {
-      logger.fine("click on " + elem.asXml() + ":============\n" + page.getTitleText)
+      debug("click on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
     this
   }
@@ -135,11 +134,11 @@ class WebPage private(private var page: HtmlPage) {
     page = fireEvent(elem, action)
     val count = page.getWebClient.waitForBackgroundJavaScript(0)
     if (count > 0) {
-      logger.warning(count + " background scripts are still running")
+      warn(count + " background scripts are still running")
       page.getWebClient.waitForBackgroundJavaScript(wait)
     }
     if (previous != this.page) {
-      logger.fine(action + " on " + elem.asXml() + ":============\n" + page.getTitleText)
+      debug(action + " on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
     this
   }
@@ -217,7 +216,7 @@ class WebPage private(private var page: HtmlPage) {
   def asText = try {
     page.asText()
   } catch {
-    case e => logger.severe("Failed extracting page text " + e); "--FAILED TO EXTRACT PAGE TEXT--"
+    case e => error("Failed extracting page text " + e); "--FAILED TO EXTRACT PAGE TEXT--"
   }
 
   def saveTo(file: String) {
@@ -269,7 +268,7 @@ class WebPage private(private var page: HtmlPage) {
     val count = page.getWebClient.waitForBackgroundJavaScript(6000)
     if (count > maxscripts){
       logger.info("scripts still running:" + count)
-      if (maxsecs <= 0) logger.warning("Timed out waiting for script completion :" + count)
+      if (maxsecs <= 0) warn("Timed out waiting for script completion :" + count)
       else waitForScripts(maxscripts, maxsecs - 6)
     }
   }
@@ -290,7 +289,7 @@ class WebPage private(private var page: HtmlPage) {
     val fw = new FileWriter(file)
     fw.write(page.asXml())
     fw.close()
-    logger.warning("Element not found :" + selector + " in " + file.getAbsolutePath)
+    warn("Element not found :" + selector + " in " + file.getAbsolutePath)
     sys.error("Element not found :" + selector + " in " + page.getTitleText )
   }
 
