@@ -1,13 +1,13 @@
 package com.codeforz.scalaclick
 
 import com.gargoylesoftware.htmlunit.html.{HtmlPage, BaseFrame, HtmlElement}
-import java.util.logging.Logger
 import collection.JavaConversions._
+import grizzled.slf4j.Logging
+
 /**
  * Base element finder
  */
-trait ElementFinder {
-  protected val logger = Logger.getLogger(this.getClass.getName)
+trait ElementFinder extends Logging{
 
   /**
    * Finds elements matching this finder
@@ -15,10 +15,10 @@ trait ElementFinder {
    * @return
    */
   def findElements(node: HtmlElement): Seq[HtmlElement] = {
-    logger.fine("Finding elements in node %s with finder %s\n".format(node, this))
+    debug("Finding elements in node %s with finder %s\n".format(node, this))
     if (node.isInstanceOf[BaseFrame]) {
       val newnode = node.asInstanceOf[BaseFrame].getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement
-      logger.fine("search node was a frame, replacing with frame inner document %s\n".format(newnode))
+      debug("search node was a frame, replacing with frame inner document %s\n".format(newnode))
       findElements(newnode)
     } else find(node)
   }
@@ -76,7 +76,7 @@ case class ById(id: String) extends ElementFinder {
   def find(node: HtmlElement): Seq[HtmlElement] = try {
     List(node.getElementById[HtmlElement](id))
   } catch {
-    case e => logger.warning("Element "+ id + "not found in " + node.getNodeName + "\n" + e ); Nil
+    case e => warn("Element "+ id + "not found in " + node.getNodeName + "\n" + e ); Nil
   }
 }
 
