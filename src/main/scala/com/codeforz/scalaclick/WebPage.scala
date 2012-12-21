@@ -23,8 +23,9 @@ object WebPage extends Logging{
   val CHROME_20 = new BrowserVersion("CHROME", "5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6", 20)
   val FIREFOX_11 = new BrowserVersion("Mozilla", "5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
 
-  def defaultClient(listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
+  def defaultClient(jsEnabled:Boolean = true, listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
     val webClient = new WebClient(browser)
+    webClient.setJavaScriptEnabled(jsEnabled)
     webClient.setThrowExceptionOnScriptError(false) //.getOptions.setThrowExceptionOnScriptError(false)
     webClient.setThrowExceptionOnFailingStatusCode(false)
     webClient.setAjaxController(new NicelyResynchronizingAjaxController)
@@ -65,8 +66,8 @@ object WebPage extends Logging{
    * @param browser the HtmlUnit browser version implementation. Defaults to Firefox-3.6 with proxy, ajax support and ignore JS errors
    * @return
    */
-  def open(url: String, listeners:ConnectionListener*)(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
-    val page: HtmlPage = defaultClient(listeners)(browser).getPage(url)
+  def open(url: String, jsEnabled:Boolean = true, listeners:Seq[ConnectionListener]=Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
+    val page: HtmlPage = defaultClient(jsEnabled, listeners)(browser).getPage(url)
     debug("Page :" + url + "==================\n" + page.asText())
     //page.setStrictErrorChecking(false)
     new WebPage(page)
@@ -77,7 +78,7 @@ object WebPage extends Logging{
    * @param url
    * @return
    */
-  def apply(url: String) = open(url)
+  def apply(url: String, jsEnabled:Boolean = true) = open(url, jsEnabled)
 }
 
 import WebPage._
@@ -385,5 +386,7 @@ class MatchedElement(elem: HtmlElement)(implicit page:WebPage) {
     case e:HtmlElement => Some(new MatchedElement(e))
     case _ => None
   }
+
+  def find(selector:String) = ElementFinder.findFirst[HtmlElement](elem, selector).map(new MatchedElement(_))
 
 }
