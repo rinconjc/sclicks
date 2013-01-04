@@ -1,11 +1,11 @@
-scala-click
+sclicks
 ===========
 
 A simple HTMLUnit wrapper for headless browsing (type and click) and data extraction. It can be used for scraping websites that implement HTTP sessions or Ajax functionality, e.g. extracting bank account transactions.
 
 Here's a simple example where we get the most watched videos from a news video site, then we search google to retrieve their URLs
 ```scala
-import org.scalaclick.WebPage._
+import com.codeforz.sclicks.WebPage._
 import java.net.URLDecoder._
 
 val page = open("http://video.news.com.au/")
