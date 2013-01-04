@@ -17,7 +17,6 @@
 package com.codeforz.sclicks
 
 import org.specs2.mutable.SpecificationWithJUnit
-import com.codeforz.sclicks.{ById, SelectorParser}
 
 
 /**
