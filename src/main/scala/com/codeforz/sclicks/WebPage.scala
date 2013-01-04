@@ -1,4 +1,20 @@
-package com.codeforz.scalaclick
+/*
+ * Copyright 2012 CodeForz
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.codeforz.sclicks
 
 import com.gargoylesoftware.htmlunit.html._
 
@@ -81,7 +97,6 @@ object WebPage extends Logging{
   def apply(url: String, jsEnabled:Boolean = true) = open(url, jsEnabled)
 }
 
-import WebPage._
 
 /**
  * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML element queries
@@ -113,7 +128,7 @@ class WebPage private(private var page: HtmlPage) extends Logging{
     doClick(elem, wait)
   }
 
-  private[scalaclick] def doClick(elem: HtmlElement, wait: Long): WebPage = {
+  private[sclicks] def doClick(elem: HtmlElement, wait: Long): WebPage = {
     val previous = page
     page = elem.click[HtmlPage]()
     val count = page.getWebClient.waitForBackgroundJavaScript(0)
@@ -125,6 +140,19 @@ class WebPage private(private var page: HtmlPage) extends Logging{
       debug("click on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
     this
+  }
+
+  def downloadText(selector:String)={
+    val elem = element[HtmlElement](selector)
+    elem.click[Page]() match{
+      case p:TextPage =>
+        val text = p.getContent
+        info("Downloaded " + text.length + " chars of data!")
+        Some(text)
+      case x =>
+        error("A TextPage was expected, but " + x  + " was returned")
+        None
+    }
   }
 
   def mouseDown(selector: String, wait: Long = 2000) = mouseAction(selector, "mousedown", wait)
@@ -144,7 +172,7 @@ class WebPage private(private var page: HtmlPage) extends Logging{
     this
   }
 
-  private[scalaclick] def fireEvent(elem:HtmlElement, event:String)={
+  private[sclicks] def fireEvent(elem:HtmlElement, event:String)={
     val result = elem.fireEvent(event)
     if(result==null) page
     else result.getNewPage.asInstanceOf[HtmlPage]
