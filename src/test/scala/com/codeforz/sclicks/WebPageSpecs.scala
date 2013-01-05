@@ -17,7 +17,6 @@
 package com.codeforz.sclicks
 
 import org.specs2.mutable.SpecificationWithJUnit
-import com.codeforz.sclicks.WebPage
 
 
 /**
@@ -32,13 +31,14 @@ class WebPageSpecs extends SpecificationWithJUnit {
       val agent = WebPage("http://video.news.com.au/")
       agent.asText must_!= (null)
     }
-/*    "click on an element" in {
+    /*"click on an element" in {
       val agent = WebPage("http://video.news.com.au/")
+      agent.waitForScripts(0)
       val titles = agent.click(".heading :content(Most Watched)").all(".listing .video-block .heading a").map(_.text)
       println("titles count " + titles.size)
       titles foreach println
       titles must not beEmpty      
-    }
-*/  }
+    }*/
+  }
 
 }
