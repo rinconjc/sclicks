@@ -18,7 +18,6 @@ package com.codeforz.sclicks
 
 import com.gargoylesoftware.htmlunit.{WebResponse, WebRequest}
 import grizzled.slf4j.Logging
-import com.codeforz.sclicks.ConnectionListener
 
 /**
  *

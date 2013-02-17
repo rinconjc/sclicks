@@ -41,13 +41,18 @@ object WebPage extends Logging{
 
   def defaultClient(jsEnabled:Boolean = true, listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
     val webClient = new WebClient(browser)
-    webClient.setJavaScriptEnabled(jsEnabled)
-    webClient.setThrowExceptionOnScriptError(false) //.getOptions.setThrowExceptionOnScriptError(false)
-    webClient.setThrowExceptionOnFailingStatusCode(false)
+    val options = webClient.getOptions
+    options.setJavaScriptEnabled(jsEnabled)
+    options.setThrowExceptionOnScriptError(false)
+    options.setThrowExceptionOnFailingStatusCode(false)
+    options.setCssEnabled(false)
+    options.setRedirectEnabled(true)
     webClient.setAjaxController(new NicelyResynchronizingAjaxController)
+    webClient.setJavaScriptTimeout(5000)
+    webClient.getJavaScriptEngine.shutdownJavaScriptExecutor()
 
     if (sys.props("http.proxyHost") != null) {
-      webClient.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt)) //.getOptions.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt))
+      options.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt)) //.getOptions.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt))
     }
     if (listeners.nonEmpty){
       //wrap connection
@@ -104,7 +109,6 @@ object WebPage extends Logging{
  */
 class WebPage private(private var page: HtmlPage) extends Logging{
 
-  import collection.JavaConversions._
   import ElementFinder._
 
   private implicit val thisPage:WebPage = this
@@ -128,18 +132,30 @@ class WebPage private(private var page: HtmlPage) extends Logging{
     doClick(elem, wait)
   }
 
+  def selectOption(selector:String, wait:Long=2000)={
+    changePage(element[HtmlOption](selector).setSelected(true).asInstanceOf[HtmlPage], wait)
+    this
+  }
+
   private[sclicks] def doClick(elem: HtmlElement, wait: Long): WebPage = {
+    changePage(elem.click[HtmlPage](), wait)
+    this
+  }
+
+  private[sclicks] def changePage(f: =>HtmlPage, wait:Long){
     val previous = page
-    page = elem.click[HtmlPage]()
-    val count = page.getWebClient.waitForBackgroundJavaScript(0)
-    if (count > 0) {
-      warn(count + " background scripts are still running")
-      page.getWebClient.waitForBackgroundJavaScript(wait)
+    //    page.getWebClient.getJavaScriptEngine.getJavaScriptExecutor.shutdown()
+    page = f
+    if (wait>0){
+      val count = page.getWebClient.waitForBackgroundJavaScript(0)
+      if (count > 0) {
+        warn(count + " background scripts are still running")
+        page.getWebClient.waitForBackgroundJavaScript(wait)
+      }
     }
     if (previous != this.page) {
-      debug("click on " + elem.asXml() + ":============\n" + page.getTitleText)
+      debug("page changed to :" + page.getTitleText)
     }
-    this
   }
 
   def downloadText(selector:String)={
@@ -220,18 +236,21 @@ class WebPage private(private var page: HtmlPage) extends Logging{
    * @param formSelector
    * @param valuesWaitingRefreshHandler
    */
-  def fill(formSelector: String, values: Map[String, String]) {
+  def fill(formSelector: String, values: (String, String)*)(wait:Long=0) {
+    val form = element[HtmlForm](formSelector)
     values.foreach {
-      case (k, v) => val inputs = element[HtmlForm](formSelector).getInputsByName(k)
+      case (k, v) =>
+      val inputs = findAll[HtmlElement](form, k)
       if (inputs.isEmpty) sys.error("form element not found:" + k)
-      inputs.foreach(e => if (e.isInstanceOf[HtmlSelect]) e.asInstanceOf[HtmlSelect].setSelectedAttribute(v, true)
+      inputs.foreach(e => if (e.isInstanceOf[HtmlSelect]) changePage(e.asInstanceOf[HtmlSelect]
+        .setSelectedAttribute(v, true).asInstanceOf[HtmlPage], wait)
       else if (e.isInstanceOf[HtmlRadioButtonInput]) {
         val radio = e.asInstanceOf[HtmlRadioButtonInput]
         if (radio.getValueAttribute == v) radio.setChecked(true)
       } else if (e.isInstanceOf[HtmlCheckBoxInput]) {
         val check = e.asInstanceOf[HtmlCheckBoxInput]
         check.setChecked(check.getValueAttribute == v)
-      } else if (e.isInstanceOf[HtmlInput]) e.setValueAttribute(v)
+      } else if (e.isInstanceOf[HtmlInput]) e.asInstanceOf[HtmlInput].setValueAttribute(v)
       else if (e.isInstanceOf[HtmlTextArea]) e.asInstanceOf[HtmlTextArea].setText(v)
       else sys.error("unsupported element for form fill:" + k)
       )
@@ -416,5 +435,12 @@ class MatchedElement(elem: HtmlElement)(implicit page:WebPage) {
   }
 
   def find(selector:String) = ElementFinder.findFirst[HtmlElement](elem, selector).map(new MatchedElement(_))
+
+  def selectOption(value:String, wait:Long = 2000){
+    elem match{
+      case e:HtmlSelect => page.changePage(e.setSelectedAttribute(value, true).asInstanceOf[HtmlPage], wait)
+      case _ =>
+    }
+  }
 
 }
