@@ -39,7 +39,7 @@ object WebPage extends Logging{
   val CHROME_20 = new BrowserVersion("CHROME", "5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6", 20)
   val FIREFOX_11 = new BrowserVersion("Mozilla", "5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
 
-  def defaultClient(jsEnabled:Boolean = true, listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
+  def defaultClient(jsEnabled:Boolean = true, listeners:Seq[ConnectionListener])(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_17) = {
     val webClient = new WebClient(browser)
     val options = webClient.getOptions
     options.setJavaScriptEnabled(jsEnabled)
@@ -49,7 +49,7 @@ object WebPage extends Logging{
     options.setRedirectEnabled(true)
     webClient.setAjaxController(new NicelyResynchronizingAjaxController)
     webClient.setJavaScriptTimeout(5000)
-    webClient.getJavaScriptEngine.shutdownJavaScriptExecutor()
+    //webClient.getJavaScriptEngine.shutdownJavaScriptExecutor()
 
     if (sys.props("http.proxyHost") != null) {
       options.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt)) //.getOptions.setProxyConfig(new ProxyConfig(sys.props("http.proxyHost"), sys.props("http.proxyPort").toInt))
@@ -77,7 +77,7 @@ object WebPage extends Logging{
         }
       }
     })
-    webClient.getJavaScriptEngine.holdPosponedActions()
+    //webClient.getJavaScriptEngine.holdPosponedActions()
     webClient
   }
 
@@ -87,7 +87,7 @@ object WebPage extends Logging{
    * @param browser the HtmlUnit browser version implementation. Defaults to Firefox-3.6 with proxy, ajax support and ignore JS errors
    * @return
    */
-  def open(url: String, jsEnabled:Boolean = true, listeners:Seq[ConnectionListener]=Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
+  def open(url: String, jsEnabled:Boolean = true, listeners:Seq[ConnectionListener]=Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_17) = {
     val page: HtmlPage = defaultClient(jsEnabled, listeners)(browser).getPage(url)
     debug("Page :" + url + "==================\n" + page.asText())
     //page.setStrictErrorChecking(false)
@@ -104,7 +104,7 @@ object WebPage extends Logging{
 
 
 /**
- * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML element queries
+ * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML celement queries
  * @param page
  */
 class WebPage private(private var page: HtmlPage) extends Logging{
