@@ -52,8 +52,8 @@
 
         <dependency>
             <groupId>org.clapper</groupId>
-            <artifactId>grizzled-slf4j_2.9.2</artifactId>
-            <version>0.6.9</version>
+            <artifactId>grizzled-slf4j_2.10</artifactId>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>org.specs2</groupId>
