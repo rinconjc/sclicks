@@ -397,6 +397,15 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
   def attr(name: String) = elem.getAttribute(name)
 
   /**
+   * Determines if element is selected applicable to html option and checkbox only
+   */
+  def selected = elem match{
+    case option:HtmlOption => option.isSelected
+    case checkbox:HtmlCheckBoxInput => checkbox.isChecked
+    case other => false
+  }
+
+  /**
    * Sets an attribute value
    * @param name
    * @param values
