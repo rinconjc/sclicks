@@ -127,6 +127,16 @@ class WebPage private(private var page: HtmlPage) extends Logging {
 
   private var pageChanged = false
 
+  private var newWindowWait = 60*1000L
+
+  /**
+   * Max wait time in seconds when opening new window
+   */
+  def windowOpenMaxWait = newWindowWait
+  def windowOpenMaxWait_=(maxWait:Int){
+    newWindowWait = maxWait*1000L
+  }
+
   /**
    * Page title
    * @return
@@ -164,7 +174,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
       val listener = new WindowOpenListener
       page.getWebClient.addWebWindowListener(listener)
       val tempPage = f
-      Try(Await.result(listener.pageFuture, Duration(wait, TimeUnit.MILLISECONDS))) match {
+      Try(Await.result(listener.pageFuture, Duration(newWindowWait, TimeUnit.MILLISECONDS))) match {
         case Success(p)=> page = p
         case Failure(e)=>
           error("failed listening for new window", e)
@@ -218,6 +228,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
         Some(u.getInputStream)
       case x =>
         error("A TextPage was expected, but " + x + " was returned")
+        debug("dumping page content:"+ x.getWebResponse.getContentAsString)
         None
     }
   }
@@ -375,14 +386,16 @@ class WebPage private(private var page: HtmlPage) extends Logging {
   }
 
   @tailrec
-  final def waitUntil(condition: ()=>Boolean, timeout:Int=60, interval:Int=1):Try[Unit]={
-    if(!condition()){
-      if(timeout<=0) Failure(sys.error("timeout waiting for condition"))
-      Thread.sleep(interval*1000)
-      waitUntil(condition, timeout - interval, interval)
-    }else{
+  final def waitUntil(condition: ()=>Boolean, timeout:Int=60, interval:Int=2):Try[Unit]={
+    if(condition()){
       logger.info("condition satisfied!")
       Success(Unit)
+    }else{
+      if(timeout<=0) Failure(new RuntimeException("timeout waiting for condition"))
+      else{
+        Thread.sleep(interval*1000)
+        waitUntil(condition, timeout - interval, interval)
+      }
     }
   }
 
