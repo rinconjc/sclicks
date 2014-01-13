@@ -18,19 +18,23 @@ package com.codeforz.sclicks
 
 import com.gargoylesoftware.htmlunit.html._
 
-import org.apache.commons.io.FileUtils
-import java.io.{ByteArrayInputStream, FileWriter, File}
+import org.apache.commons.io.{IOUtils, FileUtils}
+import java.io._
 import com.gargoylesoftware.htmlunit._
 import util.WebConnectionWrapper
 import annotation.tailrec
 import java.net.URL
-import grizzled.slf4j.Logging
+import grizzled.slf4j.{Logger, Logging}
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 import scala.util.{Try, Failure, Success}
 import scala.concurrent.ExecutionContext.Implicits.global
 import concurrent.duration._
+import com.gargoylesoftware.htmlunit.attachment.AttachmentHandler
+import scala.util.Failure
+import scala.Some
+import scala.util.Success
 
 trait ConnectionListener {
   def requesting(req: WebRequest)
@@ -83,7 +87,7 @@ object WebPage extends Logging {
         try {
           super.handleRefresh(page, url, seconds)
         } catch {
-          case e: RuntimeException if (e.getMessage.contains("Attempted to refresh a page using an ImmediateRefreshHandler")) =>
+          case e: RuntimeException if e.getMessage.contains("Attempted to refresh a page using an ImmediateRefreshHandler") =>
             warn("Ignoring refresh exception " + e)
           //do nothing
           case t: Throwable => throw t
@@ -161,42 +165,42 @@ class WebPage private(private var page: HtmlPage) extends Logging {
 
   def selectOption(selector: String, wait: Int = 4) = {
     changePage(element[HtmlOption](selector).setSelected(true).asInstanceOf[HtmlPage], wait, followNewWindow = false)
-    this
   }
 
   private[sclicks] def doClick(elem: HtmlElement, wait: Int, followNewWindow:Boolean): WebPage = {
     changePage(elem.click[HtmlPage](), wait, followNewWindow)
-    this
   }
 
-  private[sclicks] def changePage(f: => HtmlPage, wait: Int, followNewWindow:Boolean) {
+  private[sclicks] def changePage(f: => HtmlPage, wait: Int, followNewWindow:Boolean):WebPage = {
     val previous = page
     if(followNewWindow){
       val listener = new WindowOpenListener
       page.getWebClient.addWebWindowListener(listener)
-      val tempPage = f
-      Try(Await.result(listener.pageFuture, newWindowWait seconds)) match {
-        case Success(p:HtmlPage)=> page = p
+      page = f
+      val newPage = Try(Await.result(listener.pageFuture, newWindowWait seconds)) match {
+        case Success(p: HtmlPage) => new WebPage(p)
         case Success(other) =>
           warn(s"new window page content was not an html page: $other")
-          page = tempPage
-        case Failure(e)=>
+          this
+        case Failure(e) =>
           error("failed listening for new window", e)
-          page = tempPage
+          this
       }
       page.getWebClient.removeWebWindowListener(listener)
-    } else{
-      page = f
-    }
-    if (wait > 0) {
-      waitForScripts(0, wait)
-    }
-    if (previous != this.page) {
-      debug("page changed to :" + page.getTitleText)
-      pageChanged = true
+      newPage
     } else {
-      warn("Click didn't change current page!")
-      pageChanged = false
+      page = f
+      if (wait > 0) {
+        waitForScripts(0, wait)
+      }
+      if (previous != this.page) {
+        debug("page changed to :" + page.getTitleText)
+        pageChanged = true
+      } else {
+        warn("Click didn't change current page!")
+        pageChanged = false
+      }
+      this
     }
   }
 
@@ -213,19 +217,30 @@ class WebPage private(private var page: HtmlPage) extends Logging {
     }
   }
 
-  def downloadAsStream(selector: String, fromNewWindow:Boolean = false) = {
-    val elem = element[HtmlElement](selector)
-    val resultPage = if(fromNewWindow){
-      val listener = new WindowOpenListener
-      page.getWebClient.addWebWindowListener(listener)
-      val tempPage = elem.click[Page]()
-      Try(Await.result(listener.pageFuture,  newWindowWait seconds)).getOrElse{
-        error("timedout waiting for new window content page...")
-        tempPage
+  /**
+   * Tries to download an attachement by clicking on the specified selector
+   */
+  def getAttachment(selector:String)={
+    val prevHandler = page.getWebClient.getAttachmentHandler
+    val promise = Promise[Page]()
+    page.getWebClient.setAttachmentHandler(new AttachmentHandler {
+      def handleAttachment(page: Page){
+        debug(s"attachment received $page")
+        promise.success(page)
       }
-    } else{
-      elem.click[Page]()
+    })
+
+    element[HtmlElement](selector).click[Page]()
+
+    val streamOpt = Try(Await.result(promise.future, newWindowWait seconds)).map(pageToStream).getOrElse {
+      warn("timed out waiting for attachment")
+      None
     }
+    page.getWebClient.setAttachmentHandler(prevHandler)
+    streamOpt
+  }
+
+  private def pageToStream(resultPage: Page): Option[InputStream] = {
     resultPage match {
       case p: TextPage =>
         val text = p.getContent
@@ -239,7 +254,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
         Some(u.getInputStream)
       case x =>
         error("A TextPage was expected, but " + x + " was returned")
-        debug("dumping page content:"+ x.getWebResponse.getContentAsString)
+        debug("dumping page content:" + x.getWebResponse.getContentAsString)
         None
     }
   }
@@ -289,6 +304,15 @@ class WebPage private(private var page: HtmlPage) extends Logging {
   def find(selector: String) = findElement[HtmlElement](selector).map(new MatchedElement(_))
 
   /**
+   * Waits for the specified element to become available.
+   */
+  def waitFor(selector:String, maxWait:Int=60) = {
+    var r:Option[MatchedElement] = None
+    waitUntil(find(selector).map(e=>r=Some(e)).isDefined, maxWait)
+    r
+  }
+
+  /**
    * Types the string into the element matching the target selector
    * @param target
    * @param str
@@ -315,7 +339,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
       case (k, v) =>
         val inputs = findAll[HtmlElement](form, k)
         if (inputs.isEmpty) sys.error("form element not found:" + k)
-        inputs.foreach(e => e match {
+        inputs.foreach {
           case select: HtmlSelect => changePage(select
             .setSelectedAttribute(v, true).asInstanceOf[HtmlPage], wait, followNewWindow = false)
           case radio: HtmlRadioButtonInput =>
@@ -326,7 +350,6 @@ class WebPage private(private var page: HtmlPage) extends Logging {
           case area: HtmlTextArea => area.setText(v)
           case _ => sys.error("unsupported element for form fill:" + k)
         }
-        )
     }
   }
 
@@ -379,7 +402,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
   def getAsStream(path: String) = {
     val response = page.getWebClient.loadWebResponse(new WebRequest(page.getFullyQualifiedUrl(path)))
     if (response.getStatusCode != 200) {
-      sys.error("No Ok response received for " + path + "." + response.getStatusMessage)
+      sys.error("No Ok response received for " + path + "."  + response.getStatusCode + ":" + response.getStatusMessage)
     }
     else response.getContentAsStream
   }
@@ -395,8 +418,8 @@ class WebPage private(private var page: HtmlPage) extends Logging {
   }
 
   @tailrec
-  final def waitUntil(condition: ()=>Boolean, timeout:Int=60, interval:Int=2):Try[Unit]={
-    if(condition()){
+  final def waitUntil(condition: =>Boolean, timeout:Int=60, interval:Int=2):Try[Unit]={
+    if(condition){
       logger.info("condition satisfied!")
       Success(Unit)
     }else{
@@ -428,11 +451,22 @@ class WebPage private(private var page: HtmlPage) extends Logging {
       sys.error("Element not found :" + selector + " in " + page.getTitleText)
   }
 
-  private def elements[T <: HtmlElement](selector: String): Seq[T] = findAll(page.getEnclosingWindow.getTopWindow.
-    getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement, selector)
+  private def elements[T <: HtmlElement](selector: String): Seq[T] = findAll(topElement, selector)
 
-  private def findElement[T <: HtmlElement](selector: String) = findFirst[T](page.getEnclosingWindow.getTopWindow.
-    getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement, selector)
+  private def findElement[T <: HtmlElement](selector: String) = findFirst[T](topElement, selector)
+
+  private def topElement[T <: HtmlElement]: HtmlElement = {
+    page.getEnclosingWindow.getTopWindow.getEnclosedPage match {
+      case html:HtmlPage => html.getDocumentElement
+      case other =>
+        warn(s"non html page found in root $other falling back to current page $page")
+        page.getDocumentElement
+    }
+  }
+
+  def refresh(){
+    page = page.refresh().asInstanceOf[HtmlPage]
+  }
 
   def closeAll() {
     page.getWebClient.closeAllWindows()
@@ -441,12 +475,17 @@ class WebPage private(private var page: HtmlPage) extends Logging {
 
 }
 
+object MatchedElement{
+  val logger = Logger(getClass)
+}
 
 /**
  * A simple wrapper around HTML Elements to provide common and most used methods
  * @param elem
  */
 class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
+  import MatchedElement._
+  import collection.JavaConversions._
   /**
    * Text content of the element
    * @return
@@ -536,13 +575,71 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
 
   def find(selector: String) = ElementFinder.findFirst[HtmlElement](elem, selector).map(new MatchedElement(_))
 
+  def all(selector:String) = ElementFinder.findAll[HtmlElement](elem, selector).map(new MatchedElement(_))
+
   def selectOption(value: String, wait: Int = 4) {
     elem match {
-      case e: HtmlSelect => page.changePage(e.setSelectedAttribute(value, true).asInstanceOf[HtmlPage], wait, followNewWindow = false)
+      case e: HtmlSelect if ! e.getSelectedOptions.exists(_.getValueAttribute == value) =>
+        page.changePage(e.setSelectedAttribute(value, true).asInstanceOf[HtmlPage], wait, followNewWindow = false)
       case _ =>
     }
   }
 
+  def visible = elem.isDisplayed
+
+  def hidden = !elem.isDisplayed
+
+  def whenAttrChanges(name:String)(f:Option[String]=>Boolean)={
+    val p = Promise[Unit]()
+    val listener = new HtmlAttributeChangeListener {
+      def checkAttribute(attr: String, valueOpt: Option[String]) {
+        logger.debug(s"attribute $attr changed to $valueOpt")
+        if (name.equalsIgnoreCase(attr) && f(valueOpt)) {
+          elem.removeHtmlAttributeChangeListener(this)
+          p.trySuccess(())
+          logger.debug(s"promise completed $p")
+        }
+      }
+
+      def attributeAdded(event: HtmlAttributeChangeEvent) = {
+        logger.debug(s"added: ${event.getName}=${event.getValue}")
+        checkAttribute(event.getName, Some(event.getValue))
+      }
+
+      def attributeReplaced(event: HtmlAttributeChangeEvent) = {
+        logger.debug(s"replaced:${event.getName}=${event.getValue} to ${elem.getAttribute(name)}")
+        checkAttribute(event.getName, Some(elem.getAttribute(name)))
+      }
+
+      def attributeRemoved(event: HtmlAttributeChangeEvent) = {
+        logger.debug(s"removed: ${event.getName}")
+        checkAttribute(event.getName, None)
+      }
+    }
+    elem.addHtmlAttributeChangeListener(listener)
+    p.future
+  }
+
+  def whenDomChanges(domSelector:String)(f:Option[MatchedElement]=>Boolean)={
+    val p = Promise[Unit]()
+    elem.addDomChangeListener(new DomChangeListener {
+      def evalChange(event:DomChangeEvent){
+        logger.debug(s"dom changed: ${event.getChangedNode}")
+        if(f(find(domSelector))){
+          logger.debug("dom change completed")
+          p.success(())
+          elem.removeDomChangeListener(this)
+        }
+      }
+      def nodeDeleted(event: DomChangeEvent) = {
+        evalChange(event)
+      }
+      def nodeAdded(event: DomChangeEvent) = {
+        evalChange(event)
+      }
+    })
+    p.future
+  }
 }
 
 private class WindowOpenListener extends WebWindowListener with Logging{
@@ -556,7 +653,6 @@ private class WindowOpenListener extends WebWindowListener with Logging{
       pagePromise.success(event.getNewPage)
     } else{
       warn(s"other window changed content ${event.getWebWindow}")
-      pagePromise.success(event.getNewPage)
     }
   }
 
