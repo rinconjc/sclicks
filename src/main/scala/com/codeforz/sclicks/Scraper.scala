@@ -35,6 +35,7 @@ import com.gargoylesoftware.htmlunit.attachment.AttachmentHandler
 import scala.util.Failure
 import scala.Some
 import scala.util.Success
+import concurrent._
 
 trait ConnectionListener {
   def requesting(req: WebRequest)
@@ -45,7 +46,7 @@ trait ConnectionListener {
 /**
  * Simple HTMLUnit wrapper for basic UI interactions: type and click
  */
-object WebPage extends Logging {
+object Scraper extends Logging {
 
   val CHROME_20 = new BrowserVersion("CHROME", "5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6", 20)
   val FIREFOX_11 = new BrowserVersion("Mozilla", "5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
@@ -104,11 +105,11 @@ object WebPage extends Logging {
    * @param browser the HtmlUnit browser version implementation. Defaults to Firefox-3.6 with proxy, ajax support and ignore JS errors
    * @return
    */
-  def open(url: String, jsEnabled: Boolean = true, listeners: Seq[ConnectionListener] = Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
+  def open(url: String, jsEnabled: Boolean = true, listeners: Seq[ConnectionListener] = Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_17) = future{
     val page: HtmlPage = defaultClient(jsEnabled, listeners)(browser).getPage(url)
     debug("Page :" + url + "==================\n" + page.asText())
     //page.setStrictErrorChecking(false)
-    new WebPage(page)
+    new Scraper(page)
   }
 
   /**
@@ -124,11 +125,11 @@ object WebPage extends Logging {
  * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML element queries
  * @param page
  */
-class WebPage private(private var page: HtmlPage) extends Logging {
+class Scraper private(private var page: HtmlPage) extends Logging {
 
   import ElementFinder._
 
-  private implicit val thisPage: WebPage = this
+  private implicit val thisPage: Scraper = this
 
   private var pageChanged = false
 
@@ -167,27 +168,18 @@ class WebPage private(private var page: HtmlPage) extends Logging {
     changePage(element[HtmlOption](selector).setSelected(true).asInstanceOf[HtmlPage], wait, followNewWindow = false)
   }
 
-  private[sclicks] def doClick(elem: HtmlElement, wait: Int, followNewWindow:Boolean): WebPage = {
+  private[sclicks] def doClick(elem: HtmlElement, wait: Int, followNewWindow:Boolean): Scraper = {
     changePage(elem.click[HtmlPage](), wait, followNewWindow)
   }
 
-  private[sclicks] def changePage(f: => HtmlPage, wait: Int, followNewWindow:Boolean):WebPage = {
+  private[sclicks] def changePage(f: => HtmlPage, wait: Int, followNewWindow:Boolean):Scraper = {
     val previous = page
     if(followNewWindow){
       val listener = new WindowOpenListener
       page.getWebClient.addWebWindowListener(listener)
       page = f
-      val newPage = Try(Await.result(listener.pageFuture, newWindowWait seconds)) match {
-        case Success(p: HtmlPage) => new WebPage(p)
-        case Success(other) =>
-          warn(s"new window page content was not an html page: $other")
-          this
-        case Failure(e) =>
-          error("failed listening for new window", e)
-          this
-      }
+      listener.pageFuture.map(new Scraper(_))
       page.getWebClient.removeWebWindowListener(listener)
-      newPage
     } else {
       page = f
       if (wait > 0) {
@@ -202,6 +194,31 @@ class WebPage private(private var page: HtmlPage) extends Logging {
       }
       this
     }
+  }
+
+  def expectNewWindow(action: =>Unit)={
+    val promise = Promise[Scraper]()
+    var newWindow = _
+    page.getWebClient.addWebWindowListener(new WebWindowListener {
+      def webWindowContentChanged(event: WebWindowEvent) = {
+        info(s"window content changed! $event")
+        if(newWindow == event.getWebWindow){
+          event.getNewPage match {
+            case p:HtmlPage => promise.success(new Scraper(p))
+            case _ => promise.failure(new IllegalArgumentException("content loaded in new window is not an html page."))
+          }
+        } else{
+          warn(s"other window changed content ${event.getWebWindow}")
+        }
+      }
+
+      def webWindowClosed(event: WebWindowEvent) = ???
+
+      def webWindowOpened(event: WebWindowEvent) = {
+        newWindow = event.getWebWindow
+      }
+    })
+    p.future
   }
 
   def downloadText(selector: String) = {
@@ -483,7 +500,7 @@ object MatchedElement{
  * A simple wrapper around HTML Elements to provide common and most used methods
  * @param elem
  */
-class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
+class MatchedElement(elem: HtmlElement)(implicit page: Scraper) {
   import MatchedElement._
   import collection.JavaConversions._
   /**
@@ -643,14 +660,17 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
 }
 
 private class WindowOpenListener extends WebWindowListener with Logging{
-  private val pagePromise = Promise[Page]()
+  private val pagePromise = Promise[HtmlPage]()
   private var newWindow:WebWindow = _
 
   def webWindowClosed(event: WebWindowEvent){}
   def webWindowContentChanged(event: WebWindowEvent){
     info(s"window content changed! $event")
     if(newWindow == event.getWebWindow){
-      pagePromise.success(event.getNewPage)
+      event.getNewPage match {
+        case p:HtmlPage => pagePromise.success(p)
+        case _ => pagePromise.failure(new IllegalArgumentException("content loaded in new window is not an html page."))
+      }
     } else{
       warn(s"other window changed content ${event.getWebWindow}")
     }
