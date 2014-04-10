@@ -221,7 +221,7 @@ class WebPage private(private var page: HtmlPage) extends Logging{
    * @param str
    */
   def typeString(target: String, str: String) {
-    first(target).typeString(str)
+    first(target).typeIn(str)
   }
 
   /**
@@ -264,7 +264,7 @@ class WebPage private(private var page: HtmlPage) extends Logging{
   def asText = try {
     page.asText()
   } catch {
-    case e => error("Failed extracting page text " + e); "--FAILED TO EXTRACT PAGE TEXT--"
+    case e:Exception => error("Failed extracting page text " + e); "--FAILED TO EXTRACT PAGE TEXT--"
   }
 
   def saveTo(file: String) {
@@ -276,7 +276,7 @@ class WebPage private(private var page: HtmlPage) extends Logging{
    * @param selector
    * @return
    */
-  def values(selector: String): Seq[String] = elements[HtmlElement](selector).map(e => {
+  def values(selector: String): Iterator[String] = elements[HtmlElement](selector).map(e => {
     if (e.isInstanceOf[HtmlOption]) e.asInstanceOf[HtmlOption].getValueAttribute
     else if (e.isInstanceOf[HtmlInput]) e.asInstanceOf[HtmlInput].getValueAttribute
     else if (e.isInstanceOf[HtmlTextArea]) e.asInstanceOf[HtmlTextArea].getText
@@ -341,7 +341,7 @@ class WebPage private(private var page: HtmlPage) extends Logging{
     sys.error("Element not found :" + selector + " in " + page.getTitleText )
   }
 
-  private def elements[T <: HtmlElement](selector: String): Seq[T] = findAll(page.getEnclosingWindow.getTopWindow.
+  private def elements[T <: HtmlElement](selector: String) = findAll[T](page.getEnclosingWindow.getTopWindow.
     getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement, selector)
 
   private def findElement[T <: HtmlElement](selector: String) = findFirst[T](page.getEnclosingWindow.getTopWindow.
@@ -400,7 +400,7 @@ class MatchedElement(elem: HtmlElement)(implicit page:WebPage) {
    * Types the string into the element
    * @param str
    */
-  def typeString(str: String) {
+  def typeIn(str: String) {
     val selectable = elem.asInstanceOf[ {def select()}]
     selectable.select()
     elem.`type`(str)

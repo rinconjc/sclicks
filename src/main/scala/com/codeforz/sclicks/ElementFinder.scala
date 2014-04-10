@@ -30,7 +30,7 @@ trait ElementFinder extends Logging{
    * @param node
    * @return
    */
-  def findElements(node: HtmlElement): Seq[HtmlElement] = {
+  def findElements(node: HtmlElement): Iterator[HtmlElement] = {
     debug("Finding elements in node %s with finder %s\n".format(node, this))
     if (node.isInstanceOf[BaseFrame]) {
       val newnode = node.asInstanceOf[BaseFrame].getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement
@@ -44,7 +44,7 @@ trait ElementFinder extends Logging{
    * @param node
    * @return
    */
-  protected def find(node: HtmlElement): Seq[HtmlElement]
+  protected def find(node: HtmlElement): Iterator[HtmlElement]
 }
 
 /**
@@ -53,21 +53,21 @@ trait ElementFinder extends Logging{
 object ElementFinder {
 
   /**
-   * Finds all elements descendents of the root element and matching the given selector
+   * Finds all elements descendants of the root element and matching the given selector
    * @param root
    * @param selector
    * @tparam T
    * @return
    */
-  def findAll[T <: HtmlElement](root: HtmlElement, selector: String): Seq[T] = {
-    def elements(seq: Seq[ElementFinder], nodes: Seq[HtmlElement]): Seq[HtmlElement] = {
+  def findAll[T <: HtmlElement](root: HtmlElement, selector: String): Iterator[T] = {
+    def elements(seq: Seq[ElementFinder], nodes: Iterator[HtmlElement]): Iterator[HtmlElement] = {
       if (seq.isEmpty || nodes.isEmpty) nodes
       else nodes.flatMap {
         node => elements(seq.tail, seq.head.findElements(node))
       }
     }
 
-    elements(SelectorParser.parse(selector), Seq(root)).asInstanceOf[Seq[T]]
+    elements(SelectorParser.parse(selector), Iterator(root)).asInstanceOf[Iterator[T]]
   }
 
   /**
@@ -76,10 +76,12 @@ object ElementFinder {
    * @param selector
    * @tparam T
    * @return
+   * @deprecated use find(..).head instead
    */
+  @Deprecated
   def findFirst[T <: HtmlElement](root: HtmlElement, selector: String): Option[T] = {
-    val elements: Seq[T] = findAll[T](root, selector)
-    if (elements.size > 0) Some(elements(0)) else None //sys.error("No element found")
+    val elements = findAll[T](root, selector)
+    if (elements.hasNext) Some(elements.next()) else None //sys.error("No element found")
   }
 }
 
@@ -89,10 +91,12 @@ object ElementFinder {
  * @param id
  */
 case class ById(id: String) extends ElementFinder {
-  def find(node: HtmlElement): Seq[HtmlElement] = try {
-    List(node.getElementById[HtmlElement](id))
+  def find(node: HtmlElement): Iterator[HtmlElement] = try {
+    Iterator(node.getElementById[HtmlElement](id))
   } catch {
-    case e => warn("Element "+ id + "not found in " + node.getNodeName + "\n" + e ); Nil
+    case e:Exception =>
+      warn("Element "+ id + "not found in " + node.getNodeName + "\n" + e )
+      Iterator()
   }
 }
 
@@ -101,8 +105,8 @@ case class ById(id: String) extends ElementFinder {
  * @param clss
  */
 case class ByClass(clss: String) extends ElementFinder {
-  def find(node: HtmlElement): Seq[HtmlElement] = node.getHtmlElementDescendants.filter(
-    _.getAttribute("class").split("\\s+").contains(clss)).toSeq // node.querySelectorAll(clss).map(_.asInstanceOf[HtmlElement])
+  def find(node: HtmlElement): Iterator[HtmlElement] = node.getHtmlElementDescendants.filter(
+    _.getAttribute("class").split("\\s+").contains(clss)).toIterator // node.querySelectorAll(clss).map(_.asInstanceOf[HtmlElement])
 }
 
 /**
@@ -110,7 +114,7 @@ case class ByClass(clss: String) extends ElementFinder {
  * @param tag
  */
 case class ByTag(tag: String) extends ElementFinder {
-  def find(node: HtmlElement): Seq[HtmlElement] = node.getElementsByTagName(tag)
+  def find(node: HtmlElement): Iterator[HtmlElement] = node.getElementsByTagName(tag).toIterator
 }
 
 /**
@@ -126,8 +130,8 @@ case class ByAttr(tag: String, attr: String, op: String, value: String) extends 
   else sys.error("Unsupported operator " + op)
 
   def find(node: HtmlElement) = {
-    if (tag=="*") node.getHtmlElementDescendants.filter(filter).toSeq
-    else node.getElementsByTagName(tag).filter(filter)
+    if (tag=="*") node.getHtmlElementDescendants.filter(filter).toIterator
+    else node.getElementsByTagName(tag).filter(filter).toIterator
   }
 }
 
@@ -136,5 +140,5 @@ case class ByAttr(tag: String, attr: String, op: String, value: String) extends 
  * @param text
  */
 case class ByContent(text: String) extends ElementFinder {
-  protected def find(node: HtmlElement) = if (node.getTextContent.contains(text)) Seq(node) else Seq() //getChildElements.filter(_.getTextContent.contains(text)).toSeq
+  protected def find(node: HtmlElement) = if (node.getTextContent.contains(text)) Iterator(node) else Iterator() //getChildElements.filter(_.getTextContent.contains(text)).toSeq
 }
