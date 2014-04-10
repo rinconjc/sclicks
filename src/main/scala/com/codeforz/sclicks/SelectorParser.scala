@@ -43,10 +43,12 @@ object SelectorParser extends RegexParsers with Logging {
       val start = handleWhiteSpace(source, offset)
       (r findPrefixMatchOf (source.subSequence(start, source.length))) match {
         case Some(matched) =>
-          Success(matched,
-            in.drop(start + matched.end - offset))
+          Success(matched, in.drop(start + matched.end - offset))
         case None =>
           Failure("string matching regex `" + r + "' expected but `" + in.first + "' found", in.drop(start - offset))
+        case x =>
+          warn("wtf? x==None?" + (x==None) + ", x=" + x + " class loaders? " + (x.getClass.getClassLoader eq None.getClass.getClassLoader))
+          Failure("wtf", in.drop(start - offset))
       }
     }
   }
@@ -80,7 +82,7 @@ object SelectorParser extends RegexParsers with Logging {
   /**
    * Matches an element by tag name. e.g. elem
    */
-  lazy val byTag = regexMatch("(\\p{Alpha}+)".r) ^^ {
+  lazy val byTag = regexMatch("(\\p{Alpha}\\p{Alnum}*)".r) ^^ {
     case m => ByTag(m.group(1))
   }
   /**

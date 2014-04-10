@@ -57,8 +57,8 @@
         </dependency>
         <dependency>
             <groupId>org.specs2</groupId>
-            <artifactId>specs2_2.9.2</artifactId>
-            <version>1.10</version>
+            <artifactId>specs2_${scala.base}</artifactId>
+            <version>1.14</version>
             <scope>test</scope>
         </dependency>
         <dependency>
