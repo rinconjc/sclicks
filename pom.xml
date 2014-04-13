@@ -29,6 +29,7 @@
 
     <properties>
         <scala.version>2.10.1</scala.version>
+        <scala.base>2.10</scala.base>
     </properties>
 
     <dependencies>
@@ -58,7 +59,7 @@
         <dependency>
             <groupId>org.specs2</groupId>
             <artifactId>specs2_${scala.base}</artifactId>
-            <version>1.14</version>
+            <version>2.3.10</version>
             <scope>test</scope>
         </dependency>
         <dependency>

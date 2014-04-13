@@ -101,7 +101,7 @@ object WebPage extends Logging {
    * @param browser the HtmlUnit browser version implementation. Defaults to Firefox-3.6 with proxy, ajax support and ignore JS errors
    * @return
    */
-  def open(url: String, jsEnabled: Boolean = true, listeners: Seq[ConnectionListener] = Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_10) = {
+  def open(url: String, jsEnabled: Boolean = true, listeners: Seq[ConnectionListener] = Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_17) = {
     val page: HtmlPage = defaultClient(jsEnabled, listeners)(browser).getPage(url)
     debug("Page :" + url + "==================\n" + page.asText())
     //page.setStrictErrorChecking(false)
@@ -114,6 +114,7 @@ object WebPage extends Logging {
    * @return
    */
   def apply(url: String, jsEnabled: Boolean = true) = open(url, jsEnabled)
+
 }
 
 
@@ -152,7 +153,6 @@ class WebPage private(private var page: HtmlPage) extends Logging {
    * in which case page field will be update to the new page.
    *
    * @param selector An element select (see Selectors)
-   * @param wait Time in millisecs to wait for javascript execution after page load
    * @return this same instance
    */
   def click(selector: String, followNewWindow:Boolean = false) = {
@@ -253,17 +253,12 @@ class WebPage private(private var page: HtmlPage) extends Logging {
     }
   }
 
-  def mouseDown(selector: String, wait: Int = 4) = mouseAction(selector, "mousedown", wait)
+  def mouseDown(selector: String) = mouseAction(selector, "mousedown")
 
-  private def mouseAction(selector: String, action: String, wait: Int = 4) = {
+  private def mouseAction(selector: String, action: String) = {
     val elem = element[HtmlElement](selector)
     val previous = page
     page = fireEvent(elem, action)
-    val count = page.getWebClient.waitForBackgroundJavaScript(0)
-    if (count > 0) {
-      warn(count + " background scripts are still running")
-      page.getWebClient.waitForBackgroundJavaScript(wait*1000L)
-    }
     if (previous != this.page) {
       debug(action + " on " + elem.asXml() + ":============\n" + page.getTitleText)
     }
@@ -335,7 +330,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
         if (inputs.isEmpty) sys.error("form element not found:" + k)
         inputs.foreach {
           case select: HtmlSelect => changePage(select
-            .setSelectedAttribute(v, true).asInstanceOf[HtmlPage], wait, followNewWindow = false)
+            .setSelectedAttribute(v, true).asInstanceOf[HtmlPage], followNewWindow = false)
           case radio: HtmlRadioButtonInput =>
             if (radio.getValueAttribute == v) radio.setChecked(true)
           case check: HtmlCheckBoxInput =>
@@ -366,14 +361,12 @@ class WebPage private(private var page: HtmlPage) extends Logging {
    * @param selector
    * @return
    */
-  def values(selector: String): Iterator[String] = elements[HtmlElement](selector).map(e => {
-    e match {
-      case option: HtmlOption => option.getValueAttribute
-      case input: HtmlInput => input.getValueAttribute
-      case area: HtmlTextArea => area.getText
-      case _ => sys.error("Element of type " + e.getClass + " does not support values")
-    }
-  })
+  def values(selector: String): Iterator[String] = elements[HtmlElement](selector).map {
+    case option: HtmlOption => option.getValueAttribute
+    case input: HtmlInput => input.getValueAttribute
+    case area: HtmlTextArea => area.getText
+    case e => sys.error("Element of type " + e.getClass + " does not support values")
+  }
 
   /**
    * Returns the specified attribute value of the element matching the selector
@@ -562,7 +555,7 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
    * Clicks on the element (if the click loads a new use WebPage.click instead)
    */
   def click(wait: Int = 4, followNewWindow:Boolean=false) {
-    page.doClick(elem, wait, followNewWindow)
+    page.doClick(elem, followNewWindow)
   }
 
   def parent = elem.getParentNode match {
@@ -577,7 +570,7 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
   def selectOption(value: String, wait: Int = 4) {
     elem match {
       case e: HtmlSelect if ! e.getSelectedOptions.exists(_.getValueAttribute == value) =>
-        page.changePage(e.setSelectedAttribute(value, true).asInstanceOf[HtmlPage], wait, followNewWindow = false)
+        page.changePage(e.setSelectedAttribute(value, true).asInstanceOf[HtmlPage], followNewWindow = false)
       case _ =>
     }
   }
@@ -617,12 +610,13 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
     p.future
   }
 
-  def whenDomChanges(domSelector:String)(f:Option[MatchedElement]=>Boolean)={
+  def whenDomChanges(check:MatchedElement=>Boolean)={
     val p = Promise[Unit]()
+    val self = this
     elem.addDomChangeListener(new DomChangeListener {
       def evalChange(event:DomChangeEvent){
         logger.debug(s"dom changed: ${event.getChangedNode}")
-        if(f(find(domSelector))){
+        if(check(self)){
           logger.debug("dom change completed")
           p.success(())
           elem.removeDomChangeListener(this)

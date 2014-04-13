@@ -30,6 +30,6 @@ object LoggingListener extends ConnectionListener with Logging{
   }
 
   def responded(req: WebRequest, resp: WebResponse) {
-    logger.info("Request Complete:" + req.getUrl + "\n" + resp.getContentAsString)
+    logger.info("Request Complete:" + req.getUrl + "\n" + resp.getContentAsString.take(200))
   }
 }
