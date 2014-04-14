@@ -28,7 +28,7 @@ class WebPageSpecs extends SpecificationWithJUnit {
   "A WebPage" should {
 
     "open a URL" in {
-      val agent = WebPage("http://video.news.com.au/")
+      val agent = SimpleWebClient("http://video.news.com.au/")
       agent.asText must_!= (null)
     }
     /*"click on an element" in {

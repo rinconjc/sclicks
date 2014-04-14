@@ -10,7 +10,7 @@ import org.specs2.time.NoTimeConversions
 class ScraperTest extends SpecificationWithJUnit with NoTimeConversions{
   import concurrent.duration._
   import concurrent.ExecutionContext.Implicits.global
-  import WebPage._
+  import SimpleWebClient._
   "open a simple page" in{
     val p = open("http://google.com", listeners = Seq(LoggingListener))
     p.title must_== "Google"

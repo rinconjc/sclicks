@@ -22,16 +22,14 @@ import org.apache.commons.io.FileUtils
 import java.io._
 import com.gargoylesoftware.htmlunit._
 import util.WebConnectionWrapper
-import annotation.tailrec
 import java.net.URL
 import grizzled.slf4j.{Logger, Logging}
 import scala.concurrent.{Await, Promise}
 import scala.util.Try
 import concurrent.duration._
 import com.gargoylesoftware.htmlunit.attachment.AttachmentHandler
-import scala.util.Failure
+import com.codeforz.sclicks.ElementFinder._
 import scala.Some
-import scala.util.Success
 
 trait ConnectionListener {
   def requesting(req: WebRequest)
@@ -42,7 +40,7 @@ trait ConnectionListener {
 /**
  * Simple HTMLUnit wrapper for basic UI interactions: type and click
  */
-object WebPage extends Logging {
+object SimpleWebClient extends Logging {
 
   val CHROME_20 = new BrowserVersion("CHROME", "5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6", 20)
   val FIREFOX_11 = new BrowserVersion("Mozilla", "5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
@@ -102,10 +100,9 @@ object WebPage extends Logging {
    * @return
    */
   def open(url: String, jsEnabled: Boolean = true, listeners: Seq[ConnectionListener] = Seq())(implicit browser: BrowserVersion = BrowserVersion.FIREFOX_17) = {
-    val page: HtmlPage = defaultClient(jsEnabled, listeners)(browser).getPage(url)
-    debug("Page :" + url + "==================\n" + page.asText())
-    //page.setStrictErrorChecking(false)
-    new WebPage(page)
+    val client: WebClient = defaultClient(jsEnabled, listeners)(browser)
+    client.getPage(url)
+    new SimpleWebClient(client)
   }
 
   /**
@@ -122,32 +119,47 @@ object WebPage extends Logging {
  * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML celement queries
  * @param page
  */
-class WebPage private(private var page: HtmlPage) extends Logging {
+class SimpleWebClient private(private val client: WebClient) extends Logging {
 
-  import ElementFinder._
 
-  private implicit val thisPage: WebPage = this
+  private implicit val thisPage: SimpleWebClient = this
 
-  private var pageChanged = false
+  client.addWebWindowListener(new WebWindowListener {
+    override def webWindowOpened(event: WebWindowEvent): Unit = {
+      debug(s"window opened ${event.getWebWindow.getName}")
+    }
 
-  private var newWindowWait = 60
+    override def webWindowClosed(event: WebWindowEvent): Unit = {
+      debug(s"window close ${event.getWebWindow.getName}")
+    }
 
-  /**
-   * Max wait time in seconds when opening new window
-   */
-  def windowOpenMaxWait = newWindowWait
-  def windowOpenMaxWait_=(maxWait:Int){
-    newWindowWait = maxWait
+    override def webWindowContentChanged(event: WebWindowEvent): Unit = {
+      debug(s"window content changed ${event.getWebWindow.getName}")
+    }
+  })
+
+  def currentPage = new SimplePage(client.getCurrentWindow.getEnclosedPage.asInstanceOf[HtmlPage])
+
+  def withCurrentPage[T](actions: SimplePage=>T)={
+    actions(currentPage)
   }
 
-  /**
-   * Page title
-   * @return
-   */
-  def title = page.getTitleText
+  def withPageInWindow(window:String, actions:SimplePage =>T)={
+    actions(new SimplePage(client.getWebWindowByName(window).getEnclosedPage.asInstanceOf[HtmlPage]))
+  }
 
-  def hasChanged = pageChanged
+  def waitForContent(condition:SimplePage=>T)={
 
+  }
+
+  def closeAll() {
+    client.closeAllWindows()
+    logger.info("All pages closed")
+  }
+
+}
+
+class SimplePage(private val page:HtmlPage) extends Logging{
   /**
    * Simulates a click on the element matching the specified selector. The click action may result in a new page loading
    * in which case page field will be update to the new page.
@@ -155,48 +167,28 @@ class WebPage private(private var page: HtmlPage) extends Logging {
    * @param selector An element select (see Selectors)
    * @return this same instance
    */
-  def click(selector: String, followNewWindow:Boolean = false) = {
+  def click(selector: String) = {
     val elem = element[HtmlElement](selector)
-    doClick(elem, followNewWindow)
+    pageAfterAction(elem.click[HtmlPage]())
   }
 
   def selectOption(selector: String) = {
-    changePage(element[HtmlOption](selector).setSelected(true).asInstanceOf[HtmlPage], followNewWindow = false)
+    pageAfterAction(element[HtmlOption](selector).setSelected(true).asInstanceOf[HtmlPage])
   }
 
-  private[sclicks] def doClick(elem: HtmlElement, followNewWindow:Boolean): WebPage = {
-    changePage(elem.click[HtmlPage](), followNewWindow)
-  }
-
-  private[sclicks] def changePage(f: => HtmlPage, followNewWindow:Boolean):WebPage = {
-    val previous = page
-    if(followNewWindow){
-      val listener = new WindowOpenListener
-      page.getWebClient.addWebWindowListener(listener)
-      page = f
-      val newPage = Try(Await.result(listener.pageFuture, newWindowWait seconds)) match {
-        case Success(p: HtmlPage) => new WebPage(p)
-        case Success(other) =>
-          warn(s"new window page content was not an html page: $other")
-          this
-        case Failure(e) =>
-          error("failed listening for new window", e)
-          this
-      }
-      page.getWebClient.removeWebWindowListener(listener)
-      newPage
-    } else {
-      page = f
-      if (previous != this.page) {
-        debug("page changed to :" + page.getTitleText)
-        pageChanged = true
-      } else {
-        warn("Click didn't change current page!")
-        pageChanged = false
-      }
-      this
+  private[sclicks] def pageAfterAction(f: =>HtmlPage)={
+    val newPage = f
+    if(newPage != page){
+      debug(s"page changed to ${newPage.getTitleText}")
     }
+    new SimplePage(newPage)
   }
+
+  /**
+   * Page title
+   * @return
+   */
+  def title = page.getTitleText
 
   def downloadText(selector: String) = {
     val elem = element[HtmlElement](selector)
@@ -214,7 +206,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
   /**
    * Tries to download an attachement by clicking on the specified selector
    */
-  def getAttachment(selector:String)={
+  def getAttachment(selector:String, timeoutSecs:Int=30)={
     val prevHandler = page.getWebClient.getAttachmentHandler
     val promise = Promise[Page]()
     page.getWebClient.setAttachmentHandler(new AttachmentHandler {
@@ -226,7 +218,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
 
     element[HtmlElement](selector).click[Page]()
 
-    val streamOpt = Try(Await.result(promise.future, newWindowWait seconds)).map(pageToStream).getOrElse {
+    val streamOpt = Try(Await.result(promise.future, timeoutSecs seconds)).map(pageToStream).getOrElse {
       warn("timed out waiting for attachment")
       None
     }
@@ -257,12 +249,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
 
   private def mouseAction(selector: String, action: String) = {
     val elem = element[HtmlElement](selector)
-    val previous = page
-    page = fireEvent(elem, action)
-    if (previous != this.page) {
-      debug(action + " on " + elem.asXml() + ":============\n" + page.getTitleText)
-    }
-    this
+    pageAfterAction(fireEvent(elem, action))
   }
 
   private[sclicks] def fireEvent(elem: HtmlElement, event: String) = {
@@ -293,20 +280,11 @@ class WebPage private(private var page: HtmlPage) extends Logging {
   def find(selector: String) = findElement[HtmlElement](selector).map(new MatchedElement(_))
 
   /**
-   * Waits for the specified element to become available.
-   */
-  def waitFor(selector:String, maxWait:Int=60) = {
-    var r:Option[MatchedElement] = None
-    waitUntil(find(selector).map(e=>r=Some(e)).isDefined, maxWait)
-    r
-  }
-
-  /**
    * Types the string into the element matching the target selector
    * @param target
    * @param str
    */
-  def typeString(target: String, str: String) {
+  def typeIn(target: String, str: String) {
     first(target).typeIn(str)
   }
 
@@ -329,8 +307,7 @@ class WebPage private(private var page: HtmlPage) extends Logging {
         val inputs = findAll[HtmlElement](form, k)
         if (inputs.isEmpty) sys.error("form element not found:" + k)
         inputs.foreach {
-          case select: HtmlSelect => changePage(select
-            .setSelectedAttribute(v, true).asInstanceOf[HtmlPage], followNewWindow = false)
+          case select: HtmlSelect => select.setSelectedAttribute(v, true)
           case radio: HtmlRadioButtonInput =>
             if (radio.getValueAttribute == v) radio.setChecked(true)
           case check: HtmlCheckBoxInput =>
@@ -349,7 +326,8 @@ class WebPage private(private var page: HtmlPage) extends Logging {
   def asText = try {
     page.asText()
   } catch {
-    case e:Exception => error("Failed extracting page text " + e); "--FAILED TO EXTRACT PAGE TEXT--"
+    case e:Exception => error("Failed extracting page text " + e)
+      "--FAILED TO EXTRACT PAGE TEXT--"
   }
 
   def saveTo(file: String) {
@@ -396,39 +374,6 @@ class WebPage private(private var page: HtmlPage) extends Logging {
     else response.getContentAsStream
   }
 
-  @tailrec
-  final def waitForScripts(maxscripts: Int, maxsecs: Int = 60) {
-    val count = page.getWebClient.waitForBackgroundJavaScript(4000)
-    if (count > maxscripts) {
-      logger.info("scripts still running:" + count)
-      if (maxsecs <= 0) warn("Timed out waiting for script completion :" + count)
-      else waitForScripts(maxscripts, maxsecs - 4)
-    }
-  }
-
-  @tailrec
-  final def waitUntil(condition: =>Boolean, timeout:Int=60, interval:Int=2):Try[Unit]={
-    if(condition){
-      logger.info("condition satisfied!")
-      Success(Unit)
-    }else{
-      if(timeout<=0) Failure(new RuntimeException("timeout waiting for condition"))
-      else{
-        Thread.sleep(interval*1000)
-        waitUntil(condition, timeout - interval, interval)
-      }
-    }
-  }
-
-  /*
-    def waitForScripts(timeout:Long)={
-      val count = page.getWebClient.waitForBackgroundJavaScript(timeout)
-      logger.info("tasks running " + count)
-      page.getWebClient.getJavaScriptEngine.holdPosponedActions()
-      count
-    }
-  */
-
   private def element[T <: HtmlElement](selector: String): T = findElement[T](selector) match {
     case Some(e) => e
     case _ =>
@@ -454,15 +399,31 @@ class WebPage private(private var page: HtmlPage) extends Logging {
     }
   }
 
-  def refresh(){
-    page = page.refresh().asInstanceOf[HtmlPage]
+  /**
+  *
+  */
+  def whenDomChanges(check:SimplePage=>Boolean)={
+    val p = Promise[Unit]()
+    val self = this
+    val listener = new DomChangeListener {
+      override def nodeAdded(event: DomChangeEvent): Unit = {
+        debug(s"node added $event")
+        if(check(self)){
+          p.success()
+          page.removeDomChangeListener(this)
+        }
+      }
+      override def nodeDeleted(event: DomChangeEvent): Unit = {
+        debug(s"node removed $event")
+      }
+    }
+    page.addDomChangeListener(listener)
+    p.future
   }
 
-  def closeAll() {
-    page.getWebClient.closeAllWindows()
-    logger.info("All pages closed")
+  def refresh()={
+    new SimplePage(page.refresh().asInstanceOf[HtmlPage])
   }
-
 }
 
 object MatchedElement{
@@ -473,7 +434,7 @@ object MatchedElement{
  * A simple wrapper around HTML Elements to provide common and most used methods
  * @param elem
  */
-class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
+class MatchedElement(elem: HtmlElement)(implicit page: SimplePage) {
   import MatchedElement._
   import collection.JavaConversions._
   /**
@@ -554,8 +515,8 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
   /**
    * Clicks on the element (if the click loads a new use WebPage.click instead)
    */
-  def click(wait: Int = 4, followNewWindow:Boolean=false) {
-    page.doClick(elem, followNewWindow)
+  def click()={
+    page.pageAfterAction(elem.click())
   }
 
   def parent = elem.getParentNode match {
@@ -567,10 +528,10 @@ class MatchedElement(elem: HtmlElement)(implicit page: WebPage) {
 
   def all(selector:String) = ElementFinder.findAll[HtmlElement](elem, selector).map(new MatchedElement(_))
 
-  def selectOption(value: String, wait: Int = 4) {
+  def selectOption(value: String) = {
     elem match {
       case e: HtmlSelect if ! e.getSelectedOptions.exists(_.getValueAttribute == value) =>
-        page.changePage(e.setSelectedAttribute(value, true).asInstanceOf[HtmlPage], followNewWindow = false)
+        page.pageAfterAction(e.setSelectedAttribute(value, true).asInstanceOf[HtmlPage])
       case _ =>
     }
   }
