@@ -25,11 +25,12 @@ import util.WebConnectionWrapper
 import java.net.URL
 import grizzled.slf4j.{Logger, Logging}
 import scala.concurrent.{Await, Promise}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import concurrent.duration._
 import com.gargoylesoftware.htmlunit.attachment.AttachmentHandler
 import com.codeforz.sclicks.ElementFinder._
 import scala.Some
+import java.util.concurrent.TimeoutException
 
 trait ConnectionListener {
   def requesting(req: WebRequest)
@@ -140,16 +141,26 @@ class SimpleWebClient private(private val client: WebClient) extends Logging {
 
   def currentPage = new SimplePage(client.getCurrentWindow.getEnclosedPage.asInstanceOf[HtmlPage])
 
-  def withCurrentPage[T](actions: SimplePage=>T)={
+  def withCurrentPage[T](actions: SimplePage=>T):T={
     actions(currentPage)
   }
 
-  def withPageInWindow(window:String, actions:SimplePage =>T)={
+  def withPageInWindow[T](window:String, actions:SimplePage =>T):T={
     actions(new SimplePage(client.getWebWindowByName(window).getEnclosedPage.asInstanceOf[HtmlPage]))
   }
 
-  def waitForContent(condition:SimplePage=>T)={
-
+  def waitForContent(condition:SimplePage=>Boolean, maxWait:Duration = 10 seconds)={
+    val p = Promise[Unit]()
+    val listener = new SimpleWindowListener(changed = {event=>
+      val newPage = new SimplePage(event.getNewPage.asInstanceOf[HtmlPage])
+      if(condition(newPage)) {
+        p.success()
+      }
+      else warn("page changed but didn't satisfy condition.")
+    })
+    client.addWebWindowListener(listener)
+    Await.result(p.future, maxWait)
+    client.removeWebWindowListener(listener)
   }
 
   def closeAll() {
@@ -160,6 +171,7 @@ class SimpleWebClient private(private val client: WebClient) extends Logging {
 }
 
 class SimplePage(private val page:HtmlPage) extends Logging{
+  private implicit val self  = this
   /**
    * Simulates a click on the element matching the specified selector. The click action may result in a new page loading
    * in which case page field will be update to the new page.
@@ -402,7 +414,7 @@ class SimplePage(private val page:HtmlPage) extends Logging{
   /**
   *
   */
-  def whenDomChanges(check:SimplePage=>Boolean)={
+  def waitForContent(check:SimplePage=>Boolean, maxWait:Duration=10 seconds)={
     val p = Promise[Unit]()
     val self = this
     val listener = new DomChangeListener {
@@ -418,7 +430,12 @@ class SimplePage(private val page:HtmlPage) extends Logging{
       }
     }
     page.addDomChangeListener(listener)
-    p.future
+    Try(Await.result(p.future, maxWait)).recoverWith{
+      case e:TimeoutException if(check(self)) => Success()
+      case x =>
+        saveTo(File.createTempFile("dump",".html").getAbsolutePath)
+        Failure(x)
+    }.map(_=>this)
   }
 
   def refresh()={
@@ -594,24 +611,16 @@ class MatchedElement(elem: HtmlElement)(implicit page: SimplePage) {
   }
 }
 
-private class WindowOpenListener extends WebWindowListener with Logging{
-  private val pagePromise = Promise[Page]()
-  private var newWindow:WebWindow = _
-
-  def webWindowClosed(event: WebWindowEvent){}
+private class SimpleWindowListener(opened:WebWindowEvent=>Unit=_=>(), changed:WebWindowEvent=>Unit=_=>()
+                                 , closed:WebWindowEvent=>Unit=_=>()) extends WebWindowListener with Logging{
+  def webWindowClosed(event: WebWindowEvent){
+    closed(event)
+  }
   def webWindowContentChanged(event: WebWindowEvent){
-    info(s"window content changed! $event")
-    if(newWindow == event.getWebWindow){
-      pagePromise.success(event.getNewPage)
-    } else{
-      warn(s"other window changed content ${event.getWebWindow}")
-    }
+    changed(event)
   }
 
   def webWindowOpened(event: WebWindowEvent){
-    info(s"new window opened:${event.getWebWindow}")
-    newWindow = event.getWebWindow
+    opened(event)
   }
-
-  def pageFuture = pagePromise.future
 }

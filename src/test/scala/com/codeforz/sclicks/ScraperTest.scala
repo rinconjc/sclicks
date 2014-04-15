@@ -1,7 +1,6 @@
 package com.codeforz.sclicks
 
 import org.specs2.mutable.SpecificationWithJUnit
-import scala.util.Success
 import org.specs2.time.NoTimeConversions
 
 /**
@@ -9,15 +8,15 @@ import org.specs2.time.NoTimeConversions
  */
 class ScraperTest extends SpecificationWithJUnit with NoTimeConversions{
   import concurrent.duration._
-  import concurrent.ExecutionContext.Implicits.global
   import SimpleWebClient._
   "open a simple page" in{
-    val p = open("http://google.com", listeners = Seq(LoggingListener))
+    val client = open("http://google.com")
+    val p = client.currentPage
     p.title must_== "Google"
     p.first("*[name='q']").typeIn("hearthbleed")
-    p.first("body").whenDomChanges(_.find("#idres").isDefined).andThen{
-      case Success(_) => p.all("#rc h3") foreach {e=> println(e.text)}
-    } must be_==(()).await(timeout = 25 seconds)
+    p.waitForContent(_.find("#idres").isDefined, 20 seconds) must beASuccessfulTry[SimplePage]
+    p.all("#rc h3").foreach(e=>println(e.text))
+    success
   }
 
 }

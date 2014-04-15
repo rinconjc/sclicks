@@ -28,7 +28,7 @@
     </scm>
 
     <properties>
-        <scala.version>2.10.1</scala.version>
+        <scala.version>2.10.3</scala.version>
         <scala.base>2.10</scala.base>
     </properties>
 
