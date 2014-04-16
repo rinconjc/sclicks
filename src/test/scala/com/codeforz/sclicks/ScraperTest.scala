@@ -14,8 +14,14 @@ class ScraperTest extends SpecificationWithJUnit with NoTimeConversions{
     val p = client.currentPage
     p.title must_== "Google"
     p.first("*[name='q']").typeIn("hearthbleed")
-    p.waitForContent(_.find("#idres").isDefined, 20 seconds) must beASuccessfulTry[SimplePage]
-    p.all("#rc h3").foreach(e=>println(e.text))
+
+    val newPage = p.click("*[name='btnG']").waitForContent(_.find("#ires").isDefined, 20 seconds)
+    newPage must beASuccessfulTry[SimplePage]
+
+    newPage.foreach{p=>
+      p.all(".rc h3").foreach(e=> println(s"${e.text} -> ${e.find("a").map(_.attr("href"))}"))
+    }
+    client.closeAll()
     success
   }
 
