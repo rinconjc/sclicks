@@ -38,6 +38,11 @@ trait ConnectionListener {
   def responded(req: WebRequest, resp: WebResponse)
 }
 
+trait PageEvent
+case class NodeAdded(node:DomNode) extends PageEvent
+case class NodeRemoved(elem:DomNode) extends PageEvent
+
+
 /**
  * Simple HTMLUnit wrapper for basic UI interactions: type and click
  */
@@ -139,20 +144,20 @@ class SimpleWebClient private(private val client: WebClient) extends Logging {
     }
   })
 
-  def currentPage = new SimplePage(client.getCurrentWindow.getEnclosedPage.asInstanceOf[HtmlPage])
+  def currentWindow = new SimpleWebWindow(client.getCurrentWindow)
 
-  def withCurrentPage[T](actions: SimplePage=>T):T={
-    actions(currentPage)
+  def withCurrentPage[T](actions: SimpleWebWindow=>T):T={
+    actions(currentWindow)
   }
 
-  def withPageInWindow[T](window:String, actions:SimplePage =>T):T={
-    actions(new SimplePage(client.getWebWindowByName(window).getEnclosedPage.asInstanceOf[HtmlPage]))
+  def withPageInWindow[T](window:String, actions:SimpleWebWindow =>T):T={
+    actions(new SimpleWebWindow(client.getWebWindowByName(window)))
   }
 
-  def waitForContent(condition:SimplePage=>Boolean, maxWait:Duration = 10 seconds)={
+  def waitForContent(condition:SimpleWebWindow=>Boolean, maxWait:Duration = 10 seconds)={
     val p = Promise[Unit]()
     val listener = new SimpleWindowListener(changed = {event=>
-      val newPage = new SimplePage(event.getNewPage.asInstanceOf[HtmlPage])
+      val newPage = new SimpleWebWindow(event.getWebWindow)
       if(condition(newPage)) {
         p.success()
       }
@@ -170,8 +175,10 @@ class SimpleWebClient private(private val client: WebClient) extends Logging {
 
 }
 
-class SimplePage(private val page:HtmlPage) extends Logging{
+class SimpleWebWindow(private val window:WebWindow) extends Logging{
   private implicit val self  = this
+
+  def page = window.getEnclosedPage.asInstanceOf[HtmlPage]
   /**
    * Simulates a click on the element matching the specified selector. The click action may result in a new page loading
    * in which case page field will be update to the new page.
@@ -189,11 +196,12 @@ class SimplePage(private val page:HtmlPage) extends Logging{
   }
 
   private[sclicks] def pageAfterAction(f: =>HtmlPage)={
+    val curPage = page
     val newPage = f
-    if(newPage != page){
+    if(newPage != curPage){
       debug(s"page changed to ${newPage.getTitleText}")
     }
-    new SimplePage(newPage)
+    this
   }
 
   /**
@@ -397,13 +405,12 @@ class SimplePage(private val page:HtmlPage) extends Logging{
       sys.error("Element not found :" + selector + " in " + page.getTitleText)
   }
 
-  private def elements[T <: HtmlElement](selector: String) = findAll[T](page.getEnclosingWindow.getTopWindow.
-    getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement, selector)
+  private def elements[T <: HtmlElement](selector: String) = findAll[T](page.getDocumentElement, selector)
 
   private def findElement[T <: HtmlElement](selector: String) = findFirst[T](topElement, selector)
 
   private def topElement[T <: HtmlElement]: HtmlElement = {
-    page.getEnclosingWindow.getTopWindow.getEnclosedPage match {
+    page match {
       case html:HtmlPage => html.getDocumentElement
       case other =>
         warn(s"non html page found in root $other falling back to current page $page")
@@ -411,47 +418,59 @@ class SimplePage(private val page:HtmlPage) extends Logging{
     }
   }
 
-  /**
-  *
-  */
-  def waitForContent(check:SimplePage=>Boolean, maxWait:Duration=10 seconds)={
-    val p = Promise[Unit]()
+  def whenContentChanges[T](rule:PartialFunction[SimpleWebWindow,T], maxWait:Duration=10 seconds)={
+    val p = Promise[T]()
     val self = this
     val listener = new DomChangeListener {
+      val handler = safe(rule).runWith{res=>
+        p.complete(res)
+        page.removeDomChangeListener(this)
+      }
       override def nodeAdded(event: DomChangeEvent): Unit = {
         debug(s"node added $event")
-        if(check(self)){
-          p.success()
-          page.removeDomChangeListener(this)
-        }
+        handler(self)
       }
       override def nodeDeleted(event: DomChangeEvent): Unit = {
         debug(s"node removed $event")
+        handler(self)
       }
     }
     page.addDomChangeListener(listener)
     Try(Await.result(p.future, maxWait)).recoverWith{
-      case e:TimeoutException if(check(self)) => Success()
-      case x =>
-        saveTo(File.createTempFile("dump",".html").getAbsolutePath)
-        Failure(x)
-    }.map(_=>this)
+      case e:Exception =>
+        page.removeDomChangeListener(listener)
+        Failure(e)
+    }.recoverWith{
+      case e:TimeoutException if(rule.isDefinedAt(self)) =>
+        warn("page change detection missed")
+        Try(rule(self))
+    }
+  }
+
+  /**
+  *
+  */
+  def waitForContent(check:SimpleWebWindow=>Boolean, maxWait:Duration=10 seconds)={
+    whenContentChanges{case _ if check(this) => this}
   }
 
   def refresh()={
-    new SimplePage(page.refresh().asInstanceOf[HtmlPage])
+    page.refresh()
+    this
   }
 }
 
 object MatchedElement{
   val logger = Logger(getClass)
+  def unapply(selector:String)(implicit window:SimpleWebWindow) = window.find(selector)
 }
+
 
 /**
  * A simple wrapper around HTML Elements to provide common and most used methods
  * @param elem
  */
-class MatchedElement(elem: HtmlElement)(implicit page: SimplePage) {
+class MatchedElement(elem: HtmlElement)(implicit page: SimpleWebWindow) {
   import MatchedElement._
   import collection.JavaConversions._
   /**
@@ -624,3 +643,4 @@ private class SimpleWindowListener(opened:WebWindowEvent=>Unit=_=>(), changed:We
     opened(event)
   }
 }
+

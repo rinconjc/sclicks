@@ -16,7 +16,7 @@ titles foreach println
 //now let's get the urls from google
 val google = open("https://www.google.com.au")(FIREFOX_11)
 val urls = titles.map{title=>
-    google.first("input[name='q']").typeString("\"" + title + "\"")
+    google.first("input[name='q']").typeIn("\"" + title + "\"")
     google.click("form *[name='btnG']") //google flips the search button as button and input...
     google.all("#ires .g a").find(_.text.contains("Video: " + title )).map(e=>"q=([^&$]+)".r.findFirstMatchIn(e.attr("href")).map(_.group(1))).flatten
 }.flatten.map(decode(_,"UTF-8"))
