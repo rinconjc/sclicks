@@ -23,14 +23,14 @@ import java.io._
 import com.gargoylesoftware.htmlunit._
 import util.WebConnectionWrapper
 import java.net.URL
-import grizzled.slf4j.{Logger, Logging}
 import scala.concurrent.{Await, Promise}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 import concurrent.duration._
 import com.gargoylesoftware.htmlunit.attachment.AttachmentHandler
 import com.codeforz.sclicks.ElementFinder._
 import scala.Some
 import java.util.concurrent.TimeoutException
+import com.typesafe.scalalogging.slf4j.LazyLogging
 
 trait ConnectionListener {
   def requesting(req: WebRequest)
@@ -46,7 +46,7 @@ case class NodeRemoved(elem:DomNode) extends PageEvent
 /**
  * Simple HTMLUnit wrapper for basic UI interactions: type and click
  */
-object SimpleWebClient extends Logging {
+object SimpleWebClient extends LazyLogging {
 
   val CHROME_20 = new BrowserVersion("CHROME", "5.0 (Windows NT 6.2)", "Mozilla/5.0 (Windows NT 6.2) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1090.0 Safari/536.6", 20)
   val FIREFOX_11 = new BrowserVersion("Mozilla", "5.0 (Windows NT 6.1; rv:12.0)", "Mozilla/5.0 (Windows NT 6.1; rv:12.0) Gecko/20120403211507 Firefox/12.0", 12)
@@ -89,7 +89,7 @@ object SimpleWebClient extends Logging {
           super.handleRefresh(page, url, seconds)
         } catch {
           case e: RuntimeException if e.getMessage.contains("Attempted to refresh a page using an ImmediateRefreshHandler") =>
-            warn("Ignoring refresh exception " + e)
+            logger.warn("Ignoring refresh exception " + e)
           //do nothing
           case t: Throwable => throw t
         }
@@ -125,22 +125,22 @@ object SimpleWebClient extends Logging {
  * A simple HtmlPage wrapper that allows usual page interactions (type, click) as well as HTML celement queries
  * @param page
  */
-class SimpleWebClient private(private val client: WebClient) extends Logging {
+class SimpleWebClient private(private val client: WebClient) extends LazyLogging {
 
 
   private implicit val thisPage: SimpleWebClient = this
 
   client.addWebWindowListener(new WebWindowListener {
     override def webWindowOpened(event: WebWindowEvent): Unit = {
-      debug(s"window opened ${event.getWebWindow.getName}")
+      logger.debug(s"window opened ${event.getWebWindow.getName}")
     }
 
     override def webWindowClosed(event: WebWindowEvent): Unit = {
-      debug(s"window close ${event.getWebWindow.getName}")
+      logger.debug(s"window close ${event.getWebWindow.getName}")
     }
 
     override def webWindowContentChanged(event: WebWindowEvent): Unit = {
-      debug(s"window content changed ${event.getWebWindow.getName}")
+      logger.debug(s"window content changed ${event.getWebWindow.getName}")
     }
   })
 
@@ -161,7 +161,7 @@ class SimpleWebClient private(private val client: WebClient) extends Logging {
       if(condition(newPage)) {
         p.success()
       }
-      else warn("page changed but didn't satisfy condition.")
+      else logger.warn("page changed but didn't satisfy condition.")
     })
     client.addWebWindowListener(listener)
     Await.result(p.future, maxWait)
@@ -175,7 +175,7 @@ class SimpleWebClient private(private val client: WebClient) extends Logging {
 
 }
 
-class SimpleWebWindow(private val window:WebWindow) extends Logging{
+class SimpleWebWindow(private val window:WebWindow) extends LazyLogging{
   private implicit val self  = this
 
   def page = window.getEnclosedPage.asInstanceOf[HtmlPage]
@@ -199,7 +199,7 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
     val curPage = page
     val newPage = f
     if(newPage != curPage){
-      debug(s"page changed to ${newPage.getTitleText}")
+      logger.debug(s"page changed to ${newPage.getTitleText}")
     }
     this
   }
@@ -215,10 +215,10 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
     elem.click[Page]() match {
       case p: TextPage =>
         val text = p.getContent
-        info("Downloaded " + text.length + " chars of data!")
+        logger.info("Downloaded " + text.length + " chars of data!")
         Some(text)
       case x =>
-        error("A TextPage was expected, but " + x + " was returned")
+        logger.error("A TextPage was expected, but " + x + " was returned")
         None
     }
   }
@@ -231,7 +231,7 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
     val promise = Promise[Page]()
     page.getWebClient.setAttachmentHandler(new AttachmentHandler {
       def handleAttachment(page: Page){
-        debug(s"attachment received $page")
+        logger.debug(s"attachment received $page")
         promise.success(page)
       }
     })
@@ -239,7 +239,7 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
     element[HtmlElement](selector).click[Page]()
 
     val streamOpt = Try(Await.result(promise.future, timeoutSecs seconds)).map(pageToStream).getOrElse {
-      warn("timed out waiting for attachment")
+      logger.warn("timed out waiting for attachment")
       None
     }
     page.getWebClient.setAttachmentHandler(prevHandler)
@@ -250,17 +250,17 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
     resultPage match {
       case p: TextPage =>
         val text = p.getContent
-        info("Downloaded " + text.length + " chars of data!")
+        logger.info("Downloaded " + text.length + " chars of data!")
         Some(new ByteArrayInputStream(text.getBytes("UTF-8")))
       case b: BinaryPage =>
-        info("Binary page found")
+        logger.info("Binary page found")
         Some(b.getInputStream)
       case u: UnexpectedPage =>
-        info("unexpected page found")
+        logger.info("unexpected page found")
         Some(u.getInputStream)
       case x =>
-        error("A TextPage was expected, but " + x + " was returned")
-        debug("dumping page content:" + x.getWebResponse.getContentAsString)
+        logger.error("A TextPage was expected, but " + x + " was returned")
+        logger.debug("dumping page content:" + x.getWebResponse.getContentAsString)
         None
     }
   }
@@ -283,21 +283,21 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
    * @param selector
    * @return
    */
-  def all(selector: String) = elements[HtmlElement](selector).map(new MatchedElement(_))
+  def all(selector: String) = elements[HtmlElement](selector).map(MatchedElement(_))
 
   /**
    * Returns first element matching the given selector
    * @param selector
    * @return
    */
-  def first(selector: String) = new MatchedElement(element[HtmlElement](selector))
+  def first(selector: String) = MatchedElement(element[HtmlElement](selector))
 
   /**
    * Finds the element matching the given selector
    * @param selector
    * @return
    */
-  def find(selector: String) = findElement[HtmlElement](selector).map(new MatchedElement(_))
+  def find(selector: String) = findElement[HtmlElement](selector).map(MatchedElement(_))
 
   /**
    * Types the string into the element matching the target selector
@@ -401,7 +401,7 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
       val fw = new FileWriter(file)
       fw.write(page.asXml())
       fw.close()
-      warn("Element not found :" + selector + " in " + file.getAbsolutePath)
+      logger.warn("Element not found :" + selector + " in " + file.getAbsolutePath)
       sys.error("Element not found :" + selector + " in " + page.getTitleText)
   }
 
@@ -413,7 +413,7 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
     page match {
       case html:HtmlPage => html.getDocumentElement
       case other =>
-        warn(s"non html page found in root $other falling back to current page $page")
+        logger.warn(s"non html page found in root $other falling back to current page $page")
         page.getDocumentElement
     }
   }
@@ -427,11 +427,11 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
         page.removeDomChangeListener(this)
       }
       override def nodeAdded(event: DomChangeEvent): Unit = {
-        debug(s"node added $event")
+        logger.debug(s"node added $event")
         handler(self)
       }
       override def nodeDeleted(event: DomChangeEvent): Unit = {
-        debug(s"node removed $event")
+        logger.debug(s"node removed $event")
         handler(self)
       }
     }
@@ -442,7 +442,7 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
         Failure(e)
     }.recoverWith{
       case e:TimeoutException if(rule.isDefinedAt(self)) =>
-        warn("page change detection missed")
+        logger.warn("page change detection missed")
         Try(rule(self))
     }
   }
@@ -460,18 +460,11 @@ class SimpleWebWindow(private val window:WebWindow) extends Logging{
   }
 }
 
-object MatchedElement{
-  val logger = Logger(getClass)
-  def unapply(selector:String)(implicit window:SimpleWebWindow) = window.find(selector)
-}
-
-
 /**
  * A simple wrapper around HTML Elements to provide common and most used methods
  * @param elem
  */
-class MatchedElement(elem: HtmlElement)(implicit page: SimpleWebWindow) {
-  import MatchedElement._
+case class MatchedElement(elem: HtmlElement)(implicit page: SimpleWebWindow) extends LazyLogging{
   import collection.JavaConversions._
   /**
    * Text content of the element
@@ -631,7 +624,7 @@ class MatchedElement(elem: HtmlElement)(implicit page: SimpleWebWindow) {
 }
 
 private class SimpleWindowListener(opened:WebWindowEvent=>Unit=_=>(), changed:WebWindowEvent=>Unit=_=>()
-                                 , closed:WebWindowEvent=>Unit=_=>()) extends WebWindowListener with Logging{
+                                 , closed:WebWindowEvent=>Unit=_=>()) extends WebWindowListener with LazyLogging{
   def webWindowClosed(event: WebWindowEvent){
     closed(event)
   }

@@ -16,10 +16,10 @@
 
 package com.codeforz.sclicks
 
-import util.parsing.combinator.RegexParsers
+import scala.util.parsing.combinator.{PackratParsers, RegexParsers}
 import util.matching.Regex
 import scala.Some
-import grizzled.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.LazyLogging
 
 /**
  * A JQuery like html element selector parser.
@@ -34,7 +34,7 @@ import grizzled.slf4j.Logging
  * Date: 11/30/11 10:52 AM
  */
 
-object SelectorParser extends RegexParsers with Logging {
+object SelectorParser extends RegexParsers with PackratParsers with LazyLogging {
 
   def regexMatch(r: Regex): Parser[Regex.Match] = new Parser[Regex.Match] {
     def apply(in: Input) = {
@@ -44,17 +44,19 @@ object SelectorParser extends RegexParsers with Logging {
       (r findPrefixMatchOf (source.subSequence(start, source.length))) match {
         case Some(matched) =>
           Success(matched, in.drop(start + matched.end - offset))
-        case None =>
+        case _ =>
           Failure("string matching regex `" + r + "' expected but `" + in.first + "' found", in.drop(start - offset))
-        case x =>
-          warn("wtf? x==None?" + (x==None) + ", x=" + x + " class loaders? " + (x.getClass.getClassLoader eq None.getClass.getClassLoader))
-          Failure("wtf", in.drop(start - offset))
       }
     }
   }
 
   lazy val selector = term *
-  lazy val term = byId | byClass | byAttr | byContent | byTag
+
+  lazy val filtered = term ~ (byContent | byIndex)  ^^ {
+    case a ~ b => Filtered(a,b)
+  }
+
+  lazy val term:PackratParser[ElementFinder] = filtered | byId | byClass | byAttr | byTag
 
   /**
    * Matches an element id selectors. e.g. #someid
@@ -66,7 +68,7 @@ object SelectorParser extends RegexParsers with Logging {
   /**
    * Matches an element selector by class .some_css_class
    */
-  lazy val byClass = regexMatch("\\.([^\\s]+)".r) ^^ {
+  lazy val byClass = regexMatch("\\.(-?[_a-zA-Z]+[_a-zA-Z0-9-]*)".r) ^^ {
     case m => ByClass(m.group(1))
   }
 
@@ -92,6 +94,10 @@ object SelectorParser extends RegexParsers with Logging {
     case m => ByContent(m.group(1))
   }
 
+  lazy val byIndex = regexMatch(""":first""".r) ^^ { case _ => ByIndex(1)} | regexMatch(""":last""".r) ^^ {case _ => ByIndex(-1)} | regexMatch(""":eq\((\d+)\)""".r) ^^ {
+    case m => ByIndex(m.group(1).toInt)
+  }
+
   /**
    * Parses the input as a element selector chain
    * @param input
@@ -99,7 +105,7 @@ object SelectorParser extends RegexParsers with Logging {
    */
   def parse(input: String) = {
     val result = this.parseAll(selector, input)
-    debug("Parsed selectors:" + result)
+    logger.debug("Parsed selectors:" + result)
     result.getOrElse(Nil)
   }
 }

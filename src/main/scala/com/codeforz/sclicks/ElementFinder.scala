@@ -18,12 +18,15 @@ package com.codeforz.sclicks
 
 import com.gargoylesoftware.htmlunit.html.{HtmlPage, BaseFrame, HtmlElement}
 import collection.JavaConversions._
-import grizzled.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.LazyLogging
 
+trait ElementFilter {
+  def filter(nodes:Iterator[HtmlElement]):Iterator[HtmlElement]
+}
 /**
  * Base element finder
  */
-trait ElementFinder extends Logging{
+trait ElementFinder extends LazyLogging{
 
   /**
    * Finds elements matching this finder
@@ -31,10 +34,10 @@ trait ElementFinder extends Logging{
    * @return
    */
   def findElements(node: HtmlElement): Iterator[HtmlElement] = {
-    debug("Finding elements in node %s with finder %s\n".format(node, this))
+    logger.debug("Finding elements in node %s with finder %s\n".format(node, this))
     if (node.isInstanceOf[BaseFrame]) {
       val newnode = node.asInstanceOf[BaseFrame].getEnclosedPage.asInstanceOf[HtmlPage].getDocumentElement
-      debug("search node was a frame, replacing with frame inner document %s\n".format(newnode))
+      logger.debug("search node was a frame, replacing with frame inner document %s\n".format(newnode))
       findElements(newnode)
     } else find(node)
   }
@@ -44,13 +47,13 @@ trait ElementFinder extends Logging{
    * @param node
    * @return
    */
-  protected def find(node: HtmlElement): Iterator[HtmlElement]
+  protected[sclicks] def find(node: HtmlElement): Iterator[HtmlElement]
 }
 
 /**
  * A simple html element finder based on Jquery like selectors
  */
-object ElementFinder {
+object ElementFinder extends LazyLogging{
 
   /**
    * Finds all elements descendants of the root element and matching the given selector
@@ -66,8 +69,10 @@ object ElementFinder {
         node => elements(seq.tail, seq.head.findElements(node))
       }
     }
+    val finder = SelectorParser.parse(selector)
+    logger.debug(s"finder:$finder")
 
-    elements(SelectorParser.parse(selector), Iterator(root)).asInstanceOf[Iterator[T]]
+    elements(finder, Iterator(root)).asInstanceOf[Iterator[T]]
   }
 
   /**
@@ -95,7 +100,7 @@ case class ById(id: String) extends ElementFinder {
     Iterator(node.getElementById[HtmlElement](id))
   } catch {
     case e:Exception =>
-      warn("Element "+ id + "not found in " + node.getNodeName + "\n" + e )
+      logger.warn("Element "+ id + "not found in " + node.getNodeName + "\n" + e )
       Iterator()
   }
 }
@@ -139,6 +144,28 @@ case class ByAttr(tag: String, attr: String, op: String, value: String) extends 
  * Finds elements by text content
  * @param text
  */
-case class ByContent(text: String) extends ElementFinder {
-  protected def find(node: HtmlElement) = if (node.getTextContent.contains(text)) Iterator(node) else Iterator() //getChildElements.filter(_.getTextContent.contains(text)).toSeq
+case class ByContent(text: String) extends ElementFilter {
+
+  override def filter(nodes: Iterator[HtmlElement]): Iterator[HtmlElement] = nodes.filter(_.getTextContent.contains(text))
+//  protected def find(node: HtmlElement) = if (node.getTextContent.contains(text)) Iterator(node) else Iterator() //getChildElements.filter(_.getTextContent.contains(text)).toSeq
+}
+
+case class ByIndex(index:Int) extends ElementFilter{
+  require(index == -1 || index>0, "index must be greater than 0 or equal to -1 (last)")
+
+  override def filter(nodes: Iterator[HtmlElement]): Iterator[HtmlElement] = nodes match{
+    case is:IndexedSeq[HtmlElement] => if(index<= -1) Iterator(is.last) else Iterator(is(index))
+    case _ if index <= -1 =>
+      nodes.foldLeft(None: Option[HtmlElement])((prev, last)=> Some(last)).toIterator
+    case _ => nodes.drop(index-1).take(1)
+  }
+}
+
+case class Filtered(parent:ElementFinder, filter:ElementFilter) extends ElementFinder{
+  /**
+   * Finds all matching elements
+   * @param node
+   * @return
+   */
+  def find(node: HtmlElement): Iterator[HtmlElement] = filter.filter(parent.find(node))
 }

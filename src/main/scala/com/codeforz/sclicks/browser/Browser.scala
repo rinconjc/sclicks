@@ -9,11 +9,11 @@ import org.w3c.dom.{Element, NodeList, Document}
 import org.apache.http.conn.params.ConnRoutePNames
 import org.apache.http.HttpHost
 import concurrent.ExecutionContext.Implicits.global
-import grizzled.slf4j.Logging
 import javax.xml.transform.{OutputKeys, TransformerFactory}
 import javax.xml.transform.dom.DOMSource
 import java.io.StringWriter
 import javax.xml.transform.stream.StreamResult
+import com.typesafe.scalalogging.slf4j.LazyLogging
 
 class RequestFailureException(val status:Int, val message:String) extends Exception
 
@@ -28,7 +28,7 @@ import Browser._
 /**
  *
  */
-class Browser extends Logging{
+class Browser extends LazyLogging{
   lazy val httpClient = {
     val client = new DefaultHttpClient()
 
@@ -62,7 +62,7 @@ class Browser extends Logging{
   }
 }
 
-case class WebPage(document:Document) extends Logging{
+case class WebPage(document:Document) extends LazyLogging{
   document.getElementsByTagName("SCRIPT").seq foreach{s=>
     print("Executing script " + s.getAttribute("src"))
   }

@@ -7,9 +7,8 @@ import scala.util.Try
  */
 package object sclicks {
 
-  def safe[T,R](pf:PartialFunction[T,R]):PartialFunction[T,Try[R]]=new PartialFunction[T, Try[R]]{
-    def isDefinedAt(t:T) = pf.isDefinedAt(t)
-    def apply(t:T) = Try(pf.apply(t))
+  def safe[T,R](pf:PartialFunction[T,R]):PartialFunction[T,Try[R]]={
+    case t if pf.isDefinedAt(t) => Try(pf.apply(t))
   }
 
 }

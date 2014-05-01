@@ -25,9 +25,19 @@ import org.specs2.mutable.SpecificationWithJUnit
  */
 
 class SelectorParserSpecs extends SpecificationWithJUnit {
+
   "selector parser" should {
     "parse a simple id" in {
       SelectorParser.parse("#someid") mustEqual List(ById("someid"))
+    }
+    "parse with filter" in{
+      SelectorParser.parse("p:content(text)") mustEqual List(Filtered(ByTag("p"), ByContent("text")))
+      SelectorParser.parse("h2:last") mustEqual List(Filtered(ByTag("h2"), ByIndex(-1)))
+      SelectorParser.parse(".class1:first") mustEqual List(Filtered(ByClass("class1"), ByIndex(1)))
+      SelectorParser.parse("input[type='checkbox']:eq(2)") mustEqual List(Filtered(ByAttr("input","type","=","checkbox"), ByIndex(2)))
+    }
+    "parse with children" in{
+      SelectorParser.parse("div span:last") mustEqual List(ByTag("div"), Filtered(ByTag("span"), ByIndex(-1)))
     }
   }
 

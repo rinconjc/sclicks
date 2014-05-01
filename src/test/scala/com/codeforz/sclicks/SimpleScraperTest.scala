@@ -6,10 +6,10 @@ import org.specs2.time.NoTimeConversions
 /**
  * Created by julio on 13/04/14.
  */
-class ScraperTest extends SpecificationWithJUnit with NoTimeConversions{
+class SimpleScraperTest extends SpecificationWithJUnit with NoTimeConversions{
   import concurrent.duration._
   import SimpleWebClient._
-  "open a simple page" in{
+  "extract some data from a page" in{
     val client = open("http://google.com")
     val p = client.currentWindow
     p.title must_== "Google"
@@ -17,10 +17,15 @@ class ScraperTest extends SpecificationWithJUnit with NoTimeConversions{
 
     p.click("*[name='btnG']").waitForContent(_.find("#ires").isDefined, 20 seconds) must beASuccessfulTry[SimpleWebWindow]
 
-    p.all(".rc h3").foreach(e=> println(s"${e.text} -> ${e.find("a").map(_.attr("href"))}"))
+    val results = p.all(".rc h3").toSeq
+
+    results.foreach(e=> println(s"${e.text} -> ${e.find("a").map(_.attr("href"))}"))
+
+    p.first(".rc:eq(3) h3") === results(2)
 
     client.closeAll()
     success
   }
+
 
 }

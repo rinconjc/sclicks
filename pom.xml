@@ -50,11 +50,10 @@
             <artifactId>htmlunit</artifactId>
             <version>2.12</version>
         </dependency>
-
         <dependency>
-            <groupId>org.clapper</groupId>
-            <artifactId>grizzled-slf4j_2.10</artifactId>
-            <version>1.0.1</version>
+            <groupId>com.typesafe.scala-logging</groupId>
+            <artifactId>scala-logging-slf4j_2.10</artifactId>
+            <version>2.1.2</version>
         </dependency>
         <dependency>
             <groupId>org.specs2</groupId>
@@ -102,6 +101,7 @@
                     <useSystemClassLoader>false</useSystemClassLoader>
                     <includes>
                         <include>**/*Specs.java</include>
+                        <include>**/*Test.java</include>
                     </includes>
                 </configuration>
             </plugin>

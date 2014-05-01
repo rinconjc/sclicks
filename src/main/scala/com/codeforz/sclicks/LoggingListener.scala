@@ -17,13 +17,13 @@
 package com.codeforz.sclicks
 
 import com.gargoylesoftware.htmlunit.{WebResponse, WebRequest}
-import grizzled.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.LazyLogging
 
 /**
  *
  */
 
-object LoggingListener extends ConnectionListener with Logging{
+object LoggingListener extends ConnectionListener with LazyLogging{
 
   def requesting(req: WebRequest) {
     logger.info("Requesting:" + req.getUrl)
