@@ -351,7 +351,11 @@ class SimpleWebWindow(private val window:WebWindow) extends LazyLogging{
   }
 
   def saveTo(file: String) {
-    FileUtils.writeStringToFile(new File(file), page.asXml())
+    saveTo(new File(file))
+  }
+  def saveTo(file: File) {
+    logger.info(s"dumping page to $file")
+    FileUtils.writeStringToFile(file, page.asXml())
   }
 
   /**
@@ -427,7 +431,7 @@ class SimpleWebWindow(private val window:WebWindow) extends LazyLogging{
         page.removeDomChangeListener(this)
       }
       override def nodeAdded(event: DomChangeEvent): Unit = {
-        logger.debug(s"node added $event")
+        logger.debug(s"node added ${event.getChangedNode}")
         handler(self)
       }
       override def nodeDeleted(event: DomChangeEvent): Unit = {
@@ -452,6 +456,21 @@ class SimpleWebWindow(private val window:WebWindow) extends LazyLogging{
   */
   def waitForContent(check:SimpleWebWindow=>Boolean, maxWait:Duration=10 seconds)={
     whenContentChanges{case _ if check(this) => this}
+  }
+
+  def waitUntil(condition: => Boolean, maxWait:Duration = 10 seconds, retries:Int=2){
+    if(!condition){
+      val remainingJobs = window.getJobManager.waitForJobs(maxWait.toMillis)
+      logger.info(s"$remainingJobs jobs after wait timeout")
+      if(remainingJobs > 0 && !condition && retries>0){
+        waitUntil(condition, maxWait, retries - 1)
+      } else if(condition){
+        logger.info("wait complete condition satisfied")
+      } else{
+        logger.warn("wait exausted condition failed")
+        saveTo(File.createTempFile("page","html"))
+      }
+    }
   }
 
   def refresh()={
@@ -545,7 +564,7 @@ case class MatchedElement(elem: HtmlElement)(implicit page: SimpleWebWindow) ext
    * Clicks on the element (if the click loads a new use WebPage.click instead)
    */
   def click()={
-    page.pageAfterAction(elem.click())
+    page.pageAfterAction(elem.click[HtmlPage]())
   }
 
   def parent = elem.getParentNode match {
